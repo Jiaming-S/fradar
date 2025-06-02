@@ -1,4 +1,4 @@
-use std::{io::Write, sync::{Arc, Mutex}};
+use std::{cmp::min, default, io::Write, sync::{Arc, Mutex}};
 
 use crossterm::{cursor::{self, Hide}, execute, queue, style::{self, Stylize}, terminal::{size, Clear, ClearType}};
 use tokio::time::Instant;
@@ -18,7 +18,7 @@ pub async fn view_thread(flights_data: Arc<Mutex<FlightData>>, args: Args) -> to
 pub async fn startup() -> Result<(), reqwest::Error> {
   execute!(
     std::io::stdout(),
-    Hide,
+    // Hide,
     Clear(ClearType::All)
   ).unwrap();
 
@@ -28,25 +28,12 @@ pub async fn startup() -> Result<(), reqwest::Error> {
 pub async fn draw(flights_data: Arc<Mutex<FlightData>>, args: &Args) -> Result<(), Box<dyn std::error::Error>> {
   let start_time = Instant::now();
 
-  let terminal_size = size().unwrap();
-  for col in 1..(terminal_size.0 + 1) {
-    for row in 1..(terminal_size.1 + 1) {
-      if (col <= 2 || col >= terminal_size.0 - 2) || (row == 1 || row == terminal_size.1) {
-        queue!(
-          std::io::stdout(),
-          cursor::MoveTo(col, row),
-          style::PrintStyledContent("█".dark_grey())
-        )?;
-      }
-      else {
-        queue!(
-          std::io::stdout(),
-          cursor::MoveTo(col, row),
-          style::Print(" ")
-        )?;
-      }
-    }
-  }
+  fresh_terminal().await?;
+
+  let (terminal_cols, terminal_rows) = size().unwrap();
+  let terminal_mid_cols = terminal_cols / 2;
+  let terminal_mid_rows = terminal_rows / 2;
+  let scale_factor: f64 = (args.radius as f64) / (min(terminal_cols, terminal_rows) as f64);
 
 
 
@@ -59,5 +46,34 @@ pub async fn draw(flights_data: Arc<Mutex<FlightData>>, args: &Args) -> Result<(
   std::io::stdout().flush().unwrap();
 
   Ok(())
+}
+
+async fn fresh_terminal() -> Result<(), Box<dyn std::error::Error>> {
+  let (terminal_cols, terminal_rows) = size().unwrap();
+  for col in 0..(terminal_cols) {
+    for row in 0..(terminal_rows) {
+      let printed_character = match (col, row) {
+        (0, 0) => "┌",
+        (c, 0) if c == terminal_cols - 1 => "┐",
+        (0, r) if r == terminal_rows - 1 => "└",
+        (c, r) if c == terminal_cols - 1 && r == terminal_rows - 1 => "┘",
+        (_, r) if r == terminal_rows - 1 || r == 0 => "─",
+        (c, _) if c == terminal_cols - 1 || c == 0 => "│",
+        _ => " ",
+      };
+
+      queue!(
+        std::io::stdout(),
+        cursor::MoveTo(col, row),
+        style::Print(printed_character)
+      )?;
+    }
+  }
+
+  Ok(())
+}
+
+async fn position_to_terminal_coord(pos: Position, scale_factor: f64) {
+
 }
 

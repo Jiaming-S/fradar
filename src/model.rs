@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer};
+use serde_json::Value;
 
 
 #[derive(Debug, Clone)]
@@ -90,8 +91,16 @@ impl TryFrom<ADSBAircraftInformation> for Position {
   }
 }
 
-fn deserialize_to_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+pub fn deserialize_to_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
 where D: Deserializer<'de> {
-  let value: serde_json::Value = Deserialize::deserialize(deserializer)?;
-  Ok(Some(value.to_string()))
+  let value: Option<Value> = Option::deserialize(deserializer)?;
+  let result = value.map(|v| Some(match v {
+    Value::String(s) => s,
+    Value::Number(n) => n.to_string(),
+    Value::Bool(b) => b.to_string(),
+    Value::Null => return None,
+    _ => "".to_string(),
+  }));
+    
+  Ok(result.unwrap())
 }

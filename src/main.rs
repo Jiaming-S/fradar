@@ -1,7 +1,7 @@
 use std::{sync::{Arc, Mutex}, time::Duration};
 
 use controller::controller_thread;
-use crossterm::{cursor::Show, execute};
+use crossterm::{cursor::Show, execute, terminal::{Clear, ClearType}};
 use model::{FlightData, Position};
 use view::view_thread;
 
@@ -36,8 +36,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let view_thread_handle = view_thread(flights_data.clone(), command_line_args).await;
 
     ctrlc::set_handler(|| {
-        execute!(std::io::stdout(), Show).unwrap();
-        println!("Exiting...");
+        execute!(
+            std::io::stdout(),
+            Show,
+            Clear(ClearType::All)
+        ).unwrap();
         std::process::exit(0);
     })?;
 
