@@ -44,7 +44,7 @@ pub struct ADSBAircraftInformation {
   pub t: Option<String>,
   pub dbFlags: Option<u32>,
   #[serde(deserialize_with = "deserialize_to_string")]
-  pub alt_baro: String,
+  pub alt_baro: Option<String>,
   pub alt_geom: Option<i32>,
   pub gs: Option<f32>,
   pub tas: Option<u32>,
@@ -90,8 +90,8 @@ impl TryFrom<ADSBAircraftInformation> for Position {
   }
 }
 
-fn deserialize_to_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+fn deserialize_to_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
 where D: Deserializer<'de> {
   let value: serde_json::Value = Deserialize::deserialize(deserializer)?;
-  Ok(value.to_string())
+  Ok(Some(value.to_string()))
 }
