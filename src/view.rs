@@ -59,7 +59,7 @@ async fn fresh_terminal() -> Result<(), Box<dyn std::error::Error>> {
         (c, r) if c == terminal_cols - 1 && r == terminal_rows - 1 => "┘",
         (_, r) if r == terminal_rows - 1 || r == 0 => "─",
         (c, _) if c == terminal_cols - 1 || c == 0 => "│",
-        _ => " ",
+        _ => continue,
       };
 
       queue!(

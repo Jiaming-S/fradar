@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         radius: 250,
         data_rate: Duration::from_secs(1),
-        frame_rate: Duration::from_millis((1.0 / 60.0 * 1000.0) as u64),
+        frame_rate: Duration::from_millis((1.0 / 15.0 * 1000.0) as u64),
     };
     
     let controller_thread_handle = controller_thread(flights_data.clone(), command_line_args).await;

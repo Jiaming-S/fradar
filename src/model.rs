@@ -44,6 +44,7 @@ pub struct ADSBAircraftInformation {
   pub r: Option<String>,
   pub t: Option<String>,
   pub dbFlags: Option<u32>,
+  #[serde(default)]
   #[serde(deserialize_with = "deserialize_to_string")]
   pub alt_baro: Option<String>,
   pub alt_geom: Option<i32>,
