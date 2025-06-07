@@ -24,12 +24,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let command_line_args: Args = Args {  // TODO: add cli parsing through `config.rs`
         origin: Position {
-            lat: 51.89508,
-            long: 2.79437,
+            lat: 37.6191,
+            long: 122.3816,
         },
         radius: 250,
         data_rate: Duration::from_secs(1),
-        frame_rate: Duration::from_millis((1.0 / 15.0 * 1000.0) as u64),
+        frame_rate: Duration::from_millis((1.0 / 4.0 * 1000.0) as u64),
     };
     
     let controller_thread_handle = controller_thread(flights_data.clone(), command_line_args).await;
