@@ -1,9 +1,9 @@
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct FlightData {
   pub flights: Vec<Position>,
 }
@@ -16,13 +16,13 @@ impl FlightData {
   }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub struct Position {
   pub lat: f64,
   pub long: f64,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ADSBData {
   pub ac: Vec<ADSBAircraftInformation>,
   pub msg: String,
@@ -35,7 +35,7 @@ pub struct ADSBData {
 }
 
 #[allow(non_snake_case)]
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ADSBAircraftInformation {
   pub hex: String,
   #[serde(rename = "type")]

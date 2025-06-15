@@ -3,13 +3,14 @@ use std::{sync::{Arc, Mutex}, time::Duration};
 use controller::controller_thread;
 use crossterm::{cursor::Show, execute, terminal::{Clear, ClearType}};
 use model::{FlightData, Position};
+use serde::{Deserialize, Serialize};
 use view::view_thread;
 
 pub mod controller;
 pub mod model;
 pub mod view;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub struct Args {
     pub origin: Position,
     pub radius: i16,
@@ -28,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             long: 122.3816,
         },
         radius: 250,
-        data_rate: Duration::from_secs(1),
+        data_rate: Duration::from_millis((1.0 / 1.0 * 1000.0) as u64),
         frame_rate: Duration::from_millis((1.0 / 4.0 * 1000.0) as u64),
     };
     
