@@ -14,7 +14,8 @@ pub struct FRadarData {
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub enum FRadarState {
   #[default]
-  MAIN,
+  Main,
+  GracefulKill,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
@@ -24,6 +25,7 @@ pub struct FRadarArgs {
 
   pub data_rate: Duration,
   pub frame_rate: Duration,
+  pub event_rate: Duration,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]

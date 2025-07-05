@@ -1,7 +1,6 @@
 use std::{sync::{Arc, Mutex}, time::Duration};
 
 use controller::controller_thread;
-use crossterm::execute;
 use model::{FlightData, Position};
 use view::view_thread;
 
@@ -26,6 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         radius: 250,
         data_rate: Duration::from_millis((1.0 / 1.0 * 1000.0) as u64),
         frame_rate: Duration::from_millis((1.0 / 4.0 * 1000.0) as u64),
+        event_rate: Duration::from_millis(200),
     };
 
     let fradar_data: Arc<Mutex<FRadarData>> = Arc::new(Mutex::new(FRadarData {
@@ -33,24 +33,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         state: FRadarState::default(),
         args: command_line_args,
     }));
-    
+
+    let event_dispatch_thread_handle = event_dispatch_thread(fradar_data.clone()).await;    
     let controller_thread_handle = controller_thread(fradar_data.clone()).await;
     let view_thread_handle = view_thread(fradar_data.clone()).await;
 
-    let event_dispatch_thread_handle = event_dispatch_thread(fradar_data.clone()).await;
-
-    ctrlc::set_handler(|| {
-        execute!(
-            std::io::stdout(),
-            crossterm::terminal::LeaveAlternateScreen,
-        ).unwrap();
-        std::process::exit(0);
-    })?;
-
+    event_dispatch_thread_handle.await??;
     controller_thread_handle.await??;
     view_thread_handle.await??;
-
-    event_dispatch_thread_handle.await?;
 
     Ok(())
 }
