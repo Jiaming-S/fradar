@@ -1,7 +1,29 @@
+use std::{sync::{Arc, Mutex}, time::Duration};
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
+#[derive(Debug, Clone)]
+pub struct FRadarData {
+  pub flights_data: Arc<Mutex<FlightData>>,
+  pub state: FRadarState,
+  pub args: FRadarArgs,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
+pub enum FRadarState {
+  MAIN,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
+pub struct FRadarArgs {
+  pub origin: Position,
+  pub radius: i16,
+
+  pub data_rate: Duration,
+  pub frame_rate: Duration,
+}
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct FlightData {

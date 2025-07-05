@@ -1,33 +1,36 @@
-use std::{cmp::min, default, io::Write, sync::{Arc, Mutex}};
+use std::{cmp::min, io::Write, sync::{Arc, Mutex}};
 
-use crossterm::{cursor::{self, Hide}, execute, queue, style::{self, Stylize}, terminal::{size, Clear, ClearType}};
+use crossterm::{cursor::{self, Hide}, execute, queue, style::{self}, terminal::{size, Clear, ClearType}};
 use tokio::time::Instant;
 
-use crate::{model::{FlightData, Position}, Args};
+use crate::model::{FRadarArgs, FRadarData, FlightData, Position};
 
 
-pub async fn view_thread(flights_data: Arc<Mutex<FlightData>>, args: Args) -> tokio::task::JoinHandle<Result<(), reqwest::Error>> {
+pub async fn view_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<Result<(), reqwest::Error>> {
   tokio::spawn(async move {
     startup().await?;
     loop {
-      draw(flights_data.clone(), &args).await.unwrap(); // TODO: match the error: if stdio error then ignore, if reqwest error then propogate
+      draw(fradar_data.clone()).await.unwrap(); // TODO: match the error: if stdio error then ignore, if reqwest error then propogate
     }
   })
 }
 
 pub async fn startup() -> Result<(), reqwest::Error> {
+  crossterm::terminal::enable_raw_mode().unwrap();
+
   execute!(
     std::io::stdout(),
-    // Hide,
-    Clear(ClearType::All)
+    crossterm::terminal::EnterAlternateScreen,
+    Hide,
   ).unwrap();
 
   Ok(())
 }
 
-pub async fn draw(flights_data: Arc<Mutex<FlightData>>, args: &Args) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> Result<(), Box<dyn std::error::Error>> {
   let start_time = Instant::now();
 
+  let args: FRadarArgs = fradar_data.lock().unwrap().args;
   fresh_terminal().await?;
 
   let (terminal_cols, terminal_rows) = size().unwrap();
@@ -49,6 +52,11 @@ pub async fn draw(flights_data: Arc<Mutex<FlightData>>, args: &Args) -> Result<(
 }
 
 async fn fresh_terminal() -> Result<(), Box<dyn std::error::Error>> {
+  execute!(
+    std::io::stdout(),
+    Clear(ClearType::All),
+  ).unwrap();
+
   let (terminal_cols, terminal_rows) = size().unwrap();
   for col in 0..(terminal_cols) {
     for row in 0..(terminal_rows) {
@@ -59,7 +67,7 @@ async fn fresh_terminal() -> Result<(), Box<dyn std::error::Error>> {
         (c, r) if c == terminal_cols - 1 && r == terminal_rows - 1 => "┘",
         (_, r) if r == terminal_rows - 1 || r == 0 => "─",
         (c, _) if c == terminal_cols - 1 || c == 0 => "│",
-        _ => " ",
+        _ => continue,
       };
 
       queue!(

@@ -2,14 +2,16 @@ use std::sync::{Arc, Mutex};
 
 use tokio::time::{timeout, Instant};
 
-use crate::{model::{ADSBData, FlightData, Position}, Args};
+use crate::model::{ADSBData, FRadarArgs, FRadarData, FlightData, Position};
 
-pub async fn controller_thread(flights_data: Arc<Mutex<FlightData>>, args: Args) -> tokio::task::JoinHandle<Result<(), reqwest::Error>> {
+pub async fn controller_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<Result<(), reqwest::Error>> {
   tokio::spawn(async move {
     let client = reqwest::Client::new();
     
     loop {
       let start_time = Instant::now();
+
+      let args: FRadarArgs = fradar_data.lock().unwrap().args;
 
       let url = format!("https://api.adsb.lol/v2/point/{}/{}/{}", args.origin.lat, args.origin.long, args.radius);
       
@@ -42,6 +44,7 @@ pub async fn controller_thread(flights_data: Arc<Mutex<FlightData>>, args: Args)
       };
 
       {
+        let flights_data: Arc<Mutex<FlightData>> = fradar_data.lock().unwrap().flights_data.clone();
         let flights_data_ref: &mut FlightData = &mut flights_data.lock().unwrap();
         *flights_data_ref = updated_flights_data;
       }

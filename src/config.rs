@@ -1,4 +1,2 @@
 
-/// TODO: make CLI parser
-
-/// TODO: make log function
+// TODO: make CLI parser, make log function
