@@ -20,8 +20,6 @@ pub async fn event_dispatch_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio
               _ => continue,
             }
           },
-
-          Event::Mouse(_) => {},
           _ => {},
         }
       }
@@ -38,6 +36,8 @@ pub async fn graceful_shutdown(fradar_data: Arc<Mutex<FRadarData>>) {
     crossterm::terminal::LeaveAlternateScreen,
     crossterm::cursor::Show,
   ).unwrap();
+  
+  crossterm::terminal::disable_raw_mode().unwrap();
 
   std::process::exit(0);
 }
