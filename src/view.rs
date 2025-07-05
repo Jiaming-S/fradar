@@ -8,7 +8,12 @@ use crate::model::{FRadarArgs, FRadarData, FlightData, Position};
 
 pub async fn view_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<Result<(), reqwest::Error>> {
   tokio::spawn(async move {
-    startup().await?;
+    execute!(
+      std::io::stdout(),
+      crossterm::terminal::EnterAlternateScreen,
+      Hide,
+    ).unwrap();
+
     loop {
       // TODO: match the error: if stdio error then ignore, if reqwest error then propogate
       draw(fradar_data.clone()).await.unwrap();
@@ -16,23 +21,11 @@ pub async fn view_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::Jo
   })
 }
 
-pub async fn startup() -> Result<(), reqwest::Error> {
-  crossterm::terminal::enable_raw_mode().unwrap();
-
-  execute!(
-    std::io::stdout(),
-    crossterm::terminal::EnterAlternateScreen,
-    Hide,
-  ).unwrap();
-
-  Ok(())
-}
-
 pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> Result<(), Box<dyn std::error::Error>> {
   let start_time = Instant::now();
 
   let args: FRadarArgs = fradar_data.lock().unwrap().args;
-  fresh_terminal().await?;
+  draw_borders().await?;
 
   let (terminal_cols, terminal_rows) = size().unwrap();
   let terminal_mid_cols = terminal_cols / 2;
@@ -52,7 +45,7 @@ pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> Result<(), Box<dyn std
   Ok(())
 }
 
-async fn fresh_terminal() -> Result<(), Box<dyn std::error::Error>> {
+async fn draw_borders() -> Result<(), Box<dyn std::error::Error>> {
   execute!(
     std::io::stdout(),
     Clear(ClearType::All),

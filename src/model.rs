@@ -33,14 +33,6 @@ pub struct FlightData {
   pub flights: Vec<Position>,
 }
 
-impl FlightData {
-  pub fn empty() -> Self {
-    FlightData {
-      flights: vec![],
-    }
-  }
-}
-
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub struct Position {
   pub lat: f64,
