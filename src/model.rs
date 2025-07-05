@@ -11,8 +11,9 @@ pub struct FRadarData {
   pub args: FRadarArgs,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub enum FRadarState {
+  #[default]
   MAIN,
 }
 

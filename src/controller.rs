@@ -4,6 +4,7 @@ use tokio::time::{timeout, Instant};
 
 use crate::model::{ADSBData, FRadarArgs, FRadarData, FlightData, Position};
 
+
 pub async fn controller_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<Result<(), reqwest::Error>> {
   tokio::spawn(async move {
     let client = reqwest::Client::new();
@@ -14,7 +15,6 @@ pub async fn controller_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::ta
       let args: FRadarArgs = fradar_data.lock().unwrap().args;
 
       let url = format!("https://api.adsb.lol/v2/point/{}/{}/{}", args.origin.lat, args.origin.long, args.radius);
-      
       let request_future = client
         .get(url)
         .header(reqwest::header::ACCEPT, "application/json")
@@ -49,6 +49,7 @@ pub async fn controller_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::ta
         *flights_data_ref = updated_flights_data;
       }
 
+      // TODO: revisit this logic, do we need to force data rate?
       let elapsed = start_time.elapsed();
       if elapsed < args.data_rate {
         tokio::time::sleep(args.data_rate - elapsed).await;

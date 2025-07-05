@@ -16,7 +16,9 @@ mod view;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let command_line_args: FRadarArgs = FRadarArgs {  // TODO: add cli parsing through `config.rs`
+    
+    // TODO: add cli parsing through `config.rs`
+    let command_line_args: FRadarArgs = FRadarArgs {
         origin: Position {
             lat: 37.6191,
             long: 122.3816,
@@ -28,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let fradar_data: Arc<Mutex<FRadarData>> = Arc::new(Mutex::new(FRadarData {
         flights_data: Arc::new(Mutex::new(FlightData::default())),
-        state: FRadarState::MAIN,
+        state: FRadarState::default(),
         args: command_line_args,
     }));
     

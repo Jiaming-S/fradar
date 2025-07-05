@@ -10,7 +10,8 @@ pub async fn view_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::Jo
   tokio::spawn(async move {
     startup().await?;
     loop {
-      draw(fradar_data.clone()).await.unwrap(); // TODO: match the error: if stdio error then ignore, if reqwest error then propogate
+      // TODO: match the error: if stdio error then ignore, if reqwest error then propogate
+      draw(fradar_data.clone()).await.unwrap();
     }
   })
 }
