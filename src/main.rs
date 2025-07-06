@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             lat: 37.6191,
             long: -122.3816,
         },
-        radius: 250,
+        radius: 100,
         data_rate: Duration::from_millis((1.0 / 1.0 * 1000.0) as u64),
         frame_rate: Duration::from_millis((1.0 / 4.0 * 1000.0) as u64),
         event_rate: Duration::from_millis(200),

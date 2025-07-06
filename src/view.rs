@@ -1,4 +1,4 @@
-use std::{cmp::min, io::Write, sync::{Arc, Mutex}};
+use std::{cmp::{max, min}, io::Write, sync::{Arc, Mutex}};
 
 use crossterm::{cursor, execute, queue, style::{self}, terminal::{size, Clear, ClearType}};
 use tokio::time::Instant;
@@ -36,16 +36,32 @@ pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> Result<(), Box<dyn std
   // Draw side borders. Important to do this before the radar layer.
   let (terminal_cols, terminal_rows) = size().unwrap();
   draw_box(0, 0, terminal_cols, terminal_rows).await?;
+  std::io::stdout().flush().unwrap();
 
   // Draw planes as dots on a radar.
   draw_radar_layer(fradar_data_locked.flights_data.clone(), args).await?;
+  std::io::stdout().flush().unwrap();
+
+  // Draw center crosshair
+  draw_crosshair().await?;
+  std::io::stdout().flush().unwrap();
 
   let elapsed = start_time.elapsed();
   if elapsed < args.frame_rate {
     tokio::time::sleep(args.frame_rate - elapsed).await;
   }
 
-  std::io::stdout().flush().unwrap();
+  Ok(())
+}
+
+async fn draw_crosshair() -> Result<(), Box<dyn std::error::Error>> {
+  let (terminal_cols, terminal_rows) = size().unwrap();
+
+  queue!(
+    std::io::stdout(),
+    cursor::MoveTo(terminal_cols / 2, terminal_rows / 2),
+    style::Print("⌖"),
+  )?;
 
   Ok(())
 }
@@ -73,9 +89,9 @@ async fn draw_box(x: u16, y: u16, w: u16, h: u16) -> Result<(), Box<dyn std::err
 
   queue!(
     std::io::stdout(),
-    cursor::MoveTo(x, y + h),
+    cursor::MoveTo(x, y + h - 1),
     style::Print("└"),
-    cursor::MoveTo(x + 1, y + h),
+    cursor::MoveTo(x + 1, y + h - 1),
     style::Print(str::repeat("─", (w - 2).into())),
     cursor::MoveTo(x + w - 1, y + h - 1),
     style::Print("┘"),
@@ -86,17 +102,14 @@ async fn draw_box(x: u16, y: u16, w: u16, h: u16) -> Result<(), Box<dyn std::err
 
 async fn draw_radar_layer(flights_data: Arc<Mutex<FlightData>>, args: FRadarArgs) -> Result<(), Box<dyn std::error::Error>> {
   let (terminal_cols, terminal_rows) = size().unwrap();
-  let terminal_mid_cols = terminal_cols / 2;
-  let terminal_mid_rows = terminal_rows / 2;
-  let scale_factor: f64 = (args.radius as f64) / (min(terminal_cols, terminal_rows) as f64);
 
   {
     let flights: Vec<Position> = flights_data.lock().unwrap().flights.clone();
     for flight in flights {
-      let terminal_coord = position_to_terminal_coord(flight, args.origin, scale_factor);
+      let (col, row) = position_to_terminal_coords(flight, args);
       queue!(
         std::io::stdout(),
-        cursor::MoveTo(terminal_mid_cols + terminal_coord.0, terminal_mid_rows + terminal_coord.1),
+        cursor::MoveTo(col, row),
         style::Print("."),
       )?;
     }
@@ -105,9 +118,31 @@ async fn draw_radar_layer(flights_data: Arc<Mutex<FlightData>>, args: FRadarArgs
   Ok(())
 }
 
-fn position_to_terminal_coord(pos: Position, origin: Position, scale_factor: f64) -> (u16, u16) {
-  let lat_diff = pos.lat - origin.lat;
-  let long_diff = pos.long - origin.long;
-  ((lat_diff / scale_factor) as u16, (long_diff / scale_factor) as u16)
+fn position_to_terminal_coords(pos: Position, args: FRadarArgs) -> (u16, u16) {
+  let (terminal_cols, terminal_rows) = size().unwrap();
+
+  // Multiply delta_lat, delta_long by scale factor to get delta_col, delta_row
+  let latlong_to_miles = 69.44;
+  let char_aspect_ratio = 2.0;
+  let lat_scale_factor: f64 = (min(terminal_cols / 2, terminal_rows / 2) as f64) / (args.radius as f64) * latlong_to_miles * char_aspect_ratio;
+  let long_scale_factor: f64 = (min(terminal_cols / 2, terminal_rows / 2) as f64) / (args.radius as f64) * latlong_to_miles;
+
+  let delta_lat = pos.lat - args.origin.lat;
+  let delta_long = pos.long - args.origin.long;
+  
+  let delta_cols = (delta_lat * lat_scale_factor) as i32; 
+  let delta_rows = (delta_long * long_scale_factor) as i32;
+
+  let col = (terminal_cols / 2) as i32 + delta_cols;
+  let row = (terminal_rows / 2) as i32 + delta_rows;
+
+  clamp_terminal_coords(col, row)
+}
+
+fn clamp_terminal_coords(col: i32, row: i32) -> (u16, u16) {
+  let (terminal_cols, terminal_rows) = size().unwrap();
+  let clamped_col = min(max(col, 2), terminal_cols as i32 - 2) as u16;
+  let clamped_row = min(max(row, 2), terminal_rows as i32 - 2) as u16;
+  (clamped_col, clamped_row)
 }
 

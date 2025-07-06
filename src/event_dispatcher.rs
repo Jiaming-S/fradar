@@ -13,10 +13,7 @@ pub async fn event_dispatch_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio
         match read()? {
           Event::Key(key_event) => {
             match key_event.code {
-              KeyCode::Delete | KeyCode::Esc | KeyCode::End | KeyCode::Char('q') => {
-                println!("Received exit key, awaiting graceful shutdown...");
-                graceful_shutdown(fradar_data.clone()).await;
-              },
+              KeyCode::Delete | KeyCode::Esc | KeyCode::End | KeyCode::Char('q') => graceful_shutdown(fradar_data.clone()).await,
               _ => continue,
             }
           },

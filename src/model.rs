@@ -21,7 +21,7 @@ pub enum FRadarState {
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub struct FRadarArgs {
   pub origin: Position,
-  pub radius: i16,
+  pub radius: u32,
 
   pub data_rate: Duration,
   pub frame_rate: Duration,
