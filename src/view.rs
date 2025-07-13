@@ -1,4 +1,4 @@
-use std::{cmp::{max, min}, io::Write, sync::{Arc, Mutex}};
+use std::{io::Write, sync::{Arc, Mutex}};
 
 use crossterm::{cursor, execute, queue, style::{self}, terminal::{size, Clear, ClearType}};
 use tokio::time::Instant;
@@ -109,8 +109,8 @@ async fn draw_radar_layer(flights_data: Arc<Mutex<FlightData>>, args: FRadarArgs
       let (col, row) = position_to_terminal_coords(flight, args);
       queue!(
         std::io::stdout(),
-        cursor::MoveTo(col, row),
-        style::Print("."),
+        cursor::MoveTo(col as u16, row as u16),
+        style::Print(subcharacter_coord_to_character(col, row)),
       )?;
     }
   }
@@ -118,31 +118,50 @@ async fn draw_radar_layer(flights_data: Arc<Mutex<FlightData>>, args: FRadarArgs
   Ok(())
 }
 
-fn position_to_terminal_coords(pos: Position, args: FRadarArgs) -> (u16, u16) {
-  let (terminal_cols, terminal_rows) = size().unwrap();
+fn position_to_terminal_coords(pos: Position, args: FRadarArgs) -> (f64, f64) {
+  let terminal_cols: f64 = size().unwrap().0.into();
+  let terminal_rows: f64 = size().unwrap().1.into();
 
   // Multiply delta_lat, delta_long by scale factor to get delta_col, delta_row
-  let latlong_to_miles = 69.44;
-  let char_aspect_ratio = 2.0;
-  let lat_scale_factor: f64 = (min(terminal_cols / 2, terminal_rows / 2) as f64) / (args.radius as f64) * latlong_to_miles * char_aspect_ratio;
-  let long_scale_factor: f64 = (min(terminal_cols / 2, terminal_rows / 2) as f64) / (args.radius as f64) * latlong_to_miles;
+  let latlong_to_miles: f64 = 69.44;
+  let char_aspect_ratio: f64 = 2.0; // TODO: dynamically find value
+  let lat_scale_factor: f64 = (f64::min(terminal_cols / 2.0, terminal_rows / 2.0)) / (args.radius as f64) * latlong_to_miles * char_aspect_ratio;
+  let long_scale_factor: f64 = (f64::min(terminal_cols / 2.0, terminal_rows / 2.0)) / (args.radius as f64) * latlong_to_miles;
 
   let delta_lat = pos.lat - args.origin.lat;
   let delta_long = pos.long - args.origin.long;
   
-  let delta_cols = (delta_lat * lat_scale_factor) as i32; 
-  let delta_rows = (delta_long * long_scale_factor) as i32;
+  let delta_cols = delta_lat * lat_scale_factor; 
+  let delta_rows = delta_long * long_scale_factor;
 
-  let col = (terminal_cols / 2) as i32 + delta_cols;
-  let row = (terminal_rows / 2) as i32 + delta_rows;
+  let col = terminal_cols / 2.0 + delta_cols;
+  let row = terminal_rows / 2.0 + delta_rows;
 
   clamp_terminal_coords(col, row)
 }
 
-fn clamp_terminal_coords(col: i32, row: i32) -> (u16, u16) {
-  let (terminal_cols, terminal_rows) = size().unwrap();
-  let clamped_col = min(max(col, 2), terminal_cols as i32 - 2) as u16;
-  let clamped_row = min(max(row, 2), terminal_rows as i32 - 2) as u16;
+fn clamp_terminal_coords(col: f64, row: f64) -> (f64, f64) {
+  let terminal_cols: f64 = size().unwrap().0.into();
+  let terminal_rows: f64 = size().unwrap().1.into();
+
+  let clamped_col = col.clamp(0.0, terminal_cols);
+  let clamped_row = row.clamp(0.0, terminal_rows);
+
   (clamped_col, clamped_row)
+}
+
+fn subcharacter_coord_to_character(col: f64, row: f64) -> char {
+  let subchar_col: f64 = col - col.trunc();
+  let subchar_row: f64 = row - row.trunc();
+
+  let pixels: [[char; 2]; 2] = [
+    ['▘', '▝'],
+    ['▖', '▗'],
+  ];
+
+  let row_ind = (subchar_row * pixels.len() as f64) as usize;
+  let col_ind = (subchar_col * pixels[0].len() as f64) as usize;
+
+  pixels[row_ind][col_ind]
 }
 
