@@ -99,7 +99,7 @@ pub struct ADSBAircraftInformation {
 }
 
 impl TryFrom<ADSBAircraftInformation> for Position {
-  type Error = Box<dyn std::error::Error>;
+  type Error = anyhow::Result<()>;
 
   fn try_from(adsb_aircraft_info: ADSBAircraftInformation) -> Result<Self, Self::Error> {
     Ok(Position {

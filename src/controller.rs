@@ -5,7 +5,7 @@ use tokio::time::{timeout, Instant};
 use crate::model::{ADSBData, FRadarArgs, FRadarData, FlightData, Position};
 
 
-pub async fn controller_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<Result<(), reqwest::Error>> {
+pub async fn controller_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<anyhow::Result<()>> {
   tokio::spawn(async move {
     let client = reqwest::Client::new();
     

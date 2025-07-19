@@ -4,7 +4,7 @@ use crossterm::{event::{poll, read, Event, KeyCode}, execute};
 
 use crate::model::{FRadarArgs, FRadarData, FRadarState};
 
-pub async fn event_dispatch_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<Result<(), std::io::Error>> {
+pub async fn event_dispatch_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<anyhow::Result<()>> {
   tokio::spawn(async move {
     loop {
       let args: FRadarArgs = fradar_data.lock().unwrap().args;

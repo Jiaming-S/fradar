@@ -6,7 +6,7 @@ use tokio::time::Instant;
 use crate::model::{FRadarArgs, FRadarData, FlightData, Position};
 
 
-pub async fn view_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<Result<(), reqwest::Error>> {
+pub async fn view_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<anyhow::Result<()>> {
   tokio::spawn(async move {
     crossterm::terminal::enable_raw_mode().unwrap();
     execute!(
@@ -22,7 +22,7 @@ pub async fn view_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::Jo
   })
 }
 
-pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> anyhow::Result<()> {
   let start_time = Instant::now();
 
   execute!(
@@ -54,7 +54,7 @@ pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> Result<(), Box<dyn std
   Ok(())
 }
 
-async fn draw_crosshair() -> Result<(), Box<dyn std::error::Error>> {
+async fn draw_crosshair() -> anyhow::Result<()> {
   let (terminal_cols, terminal_rows) = size().unwrap();
 
   queue!(
@@ -66,7 +66,7 @@ async fn draw_crosshair() -> Result<(), Box<dyn std::error::Error>> {
   Ok(())
 }
 
-async fn draw_box(x: u16, y: u16, w: u16, h: u16) -> Result<(), Box<dyn std::error::Error>> {
+async fn draw_box(x: u16, y: u16, w: u16, h: u16) -> anyhow::Result<()> {
   queue!(
     std::io::stdout(),
     cursor::MoveTo(x, y),
@@ -100,7 +100,7 @@ async fn draw_box(x: u16, y: u16, w: u16, h: u16) -> Result<(), Box<dyn std::err
   Ok(())
 }
 
-async fn draw_radar_layer(flights_data: Arc<Mutex<FlightData>>, args: FRadarArgs) -> Result<(), Box<dyn std::error::Error>> {
+async fn draw_radar_layer(flights_data: Arc<Mutex<FlightData>>, args: FRadarArgs) -> anyhow::Result<()> {
   let (terminal_cols, terminal_rows) = size().unwrap();
 
   {
