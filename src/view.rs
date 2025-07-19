@@ -1,4 +1,4 @@
-use std::{io::Write, sync::{Arc, Mutex}};
+use std::{io::{Write}, sync::{Arc, Mutex}};
 
 use crossterm::{cursor, execute, queue, style::{self}, terminal::{size, Clear, ClearType}};
 use tokio::time::Instant;
@@ -8,16 +8,17 @@ use crate::model::{FRadarArgs, FRadarData, FlightData, Position};
 
 pub async fn view_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<anyhow::Result<()>> {
   tokio::spawn(async move {
-    crossterm::terminal::enable_raw_mode().unwrap();
+    crossterm::terminal::enable_raw_mode()?;
     execute!(
       std::io::stdout(),
       crossterm::terminal::EnterAlternateScreen,
       crossterm::cursor::Hide,
-    ).unwrap();
+      crossterm::event::EnableMouseCapture,
+    )?;
 
     loop {
       // TODO: match the error: if stdio error then ignore, if reqwest error then propogate
-      draw(fradar_data.clone()).await.unwrap();
+      draw(fradar_data.clone()).await?;
     }
   })
 }
@@ -25,26 +26,25 @@ pub async fn view_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::Jo
 pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> anyhow::Result<()> {
   let start_time = Instant::now();
 
-  execute!(
+  queue!(
     std::io::stdout(),
     Clear(ClearType::All),
-  ).unwrap();
+  )?;
   
   let fradar_data_locked: FRadarData = fradar_data.lock().unwrap().clone();
   let args: FRadarArgs = fradar_data_locked.args;
-
-  // Draw side borders. Important to do this before the radar layer.
-  let (terminal_cols, terminal_rows) = size().unwrap();
-  draw_box(0, 0, terminal_cols, terminal_rows).await?;
-  std::io::stdout().flush().unwrap();
+  let (terminal_cols, terminal_rows) = size()?;
 
   // Draw planes as dots on a radar.
-  draw_radar_layer(fradar_data_locked.flights_data.clone(), args).await?;
-  std::io::stdout().flush().unwrap();
+  draw_radar_layer(fradar_data_locked.flights_data.clone(), args)?;
+
+  // Draw side borders.
+  draw_box_with_label(0, 0, terminal_cols, terminal_rows, "fradar".to_string())?;
 
   // Draw center crosshair
-  draw_crosshair().await?;
-  std::io::stdout().flush().unwrap();
+  draw_crosshair()?;
+  
+  std::io::stdout().flush()?;
 
   let elapsed = start_time.elapsed();
   if elapsed < args.frame_rate {
@@ -54,8 +54,8 @@ pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> anyhow::Result<()> {
   Ok(())
 }
 
-async fn draw_crosshair() -> anyhow::Result<()> {
-  let (terminal_cols, terminal_rows) = size().unwrap();
+fn draw_crosshair() -> anyhow::Result<()> {
+  let (terminal_cols, terminal_rows) = size()?;
 
   queue!(
     std::io::stdout(),
@@ -66,7 +66,18 @@ async fn draw_crosshair() -> anyhow::Result<()> {
   Ok(())
 }
 
-async fn draw_box(x: u16, y: u16, w: u16, h: u16) -> anyhow::Result<()> {
+fn draw_box_with_label(x: u16, y: u16, w: u16, h: u16, label: String) -> anyhow::Result<()> {
+  draw_box(x, y, w, h)?;
+  queue!(
+    std::io::stdout(),
+    cursor::MoveTo(x + w / 2 - label.len() as u16 / 2, y),
+    style::Print(label),
+  )?;
+
+  Ok(())
+}
+
+fn draw_box(x: u16, y: u16, w: u16, h: u16) -> anyhow::Result<()> {
   queue!(
     std::io::stdout(),
     cursor::MoveTo(x, y),
@@ -100,8 +111,8 @@ async fn draw_box(x: u16, y: u16, w: u16, h: u16) -> anyhow::Result<()> {
   Ok(())
 }
 
-async fn draw_radar_layer(flights_data: Arc<Mutex<FlightData>>, args: FRadarArgs) -> anyhow::Result<()> {
-  let (terminal_cols, terminal_rows) = size().unwrap();
+fn draw_radar_layer(flights_data: Arc<Mutex<FlightData>>, args: FRadarArgs) -> anyhow::Result<()> {
+  let (terminal_cols, terminal_rows) = size()?;
 
   {
     let flights: Vec<Position> = flights_data.lock().unwrap().flights.clone();
@@ -110,7 +121,7 @@ async fn draw_radar_layer(flights_data: Arc<Mutex<FlightData>>, args: FRadarArgs
       queue!(
         std::io::stdout(),
         cursor::MoveTo(col as u16, row as u16),
-        style::Print(subcharacter_coord_to_character(col, row)),
+        style::Print("•"),
       )?;
     }
   }
@@ -148,20 +159,5 @@ fn clamp_terminal_coords(col: f64, row: f64) -> (f64, f64) {
   let clamped_row = row.clamp(0.0, terminal_rows);
 
   (clamped_col, clamped_row)
-}
-
-fn subcharacter_coord_to_character(col: f64, row: f64) -> char {
-  let subchar_col: f64 = col - col.trunc();
-  let subchar_row: f64 = row - row.trunc();
-
-  let pixels: [[char; 2]; 2] = [
-    ['▘', '▝'],
-    ['▖', '▗'],
-  ];
-
-  let row_ind = (subchar_row * pixels.len() as f64) as usize;
-  let col_ind = (subchar_col * pixels[0].len() as f64) as usize;
-
-  pixels[row_ind][col_ind]
 }
 
