@@ -6,7 +6,7 @@ use crate::model::{FRadarArgs, FRadarData, FRadarState};
 
 pub async fn event_dispatch_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<anyhow::Result<()>> {
   tokio::spawn(async move {
-    loop {
+    while fradar_data.lock().unwrap().state != FRadarState::GracefulKill {
       let args: FRadarArgs = fradar_data.lock().unwrap().args;
 
       if poll(args.event_rate)? {
@@ -28,6 +28,8 @@ pub async fn event_dispatch_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio
         }
       }
     }
+
+    Ok(())
   })
 }
 
@@ -43,8 +45,6 @@ pub fn graceful_shutdown(fradar_data: Arc<Mutex<FRadarData>>) {
   ).unwrap();
   
   crossterm::terminal::disable_raw_mode().unwrap();
-
-  std::process::exit(0);
 }
 
 pub fn change_radius(fradar_data: Arc<Mutex<FRadarData>>, delta: i32) {

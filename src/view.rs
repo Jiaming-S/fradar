@@ -3,7 +3,7 @@ use std::{io::{Write}, sync::{Arc, Mutex}};
 use crossterm::{cursor, execute, queue, style::{self}, terminal::{size, Clear, ClearType}};
 use tokio::time::Instant;
 
-use crate::model::{FRadarArgs, FRadarData, FlightData, Position};
+use crate::model::{FRadarArgs, FRadarData, FRadarState, FlightData, Position};
 
 
 pub async fn view_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<anyhow::Result<()>> {
@@ -16,10 +16,12 @@ pub async fn view_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::Jo
       crossterm::event::EnableMouseCapture,
     )?;
 
-    loop {
+    while fradar_data.lock().unwrap().state != FRadarState::GracefulKill {
       // TODO: match the error: if stdio error then ignore, if reqwest error then propogate
       draw(fradar_data.clone()).await?;
     }
+
+    Ok(())
   })
 }
 

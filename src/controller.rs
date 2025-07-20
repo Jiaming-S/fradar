@@ -2,14 +2,14 @@ use std::sync::{Arc, Mutex};
 
 use tokio::time::{timeout, Instant};
 
-use crate::model::{ADSBData, FRadarArgs, FRadarData, FlightData, Position};
+use crate::model::{ADSBData, FRadarArgs, FRadarData, FRadarState, FlightData, Position};
 
 
 pub async fn controller_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<anyhow::Result<()>> {
   tokio::spawn(async move {
     let client = reqwest::Client::new();
     
-    loop {
+    while fradar_data.lock().unwrap().state != FRadarState::GracefulKill {
       let start_time = Instant::now();
 
       let args: FRadarArgs = fradar_data.lock().unwrap().args;
@@ -55,5 +55,7 @@ pub async fn controller_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::ta
         tokio::time::sleep(args.data_rate - elapsed).await;
       }
     }
+
+    Ok(())
   })
 }
