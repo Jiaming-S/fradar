@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use tokio::time::{timeout, Instant};
 
-use crate::model::{ADSBData, FRadarArgs, FRadarData, FRadarState, FlightData, Position};
+use crate::model::{ADSBData, FRadarArgs, FRadarData, FRadarState, FlightData, Label, Position};
 
 
 pub async fn controller_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<anyhow::Result<()>> {
@@ -37,10 +37,21 @@ pub async fn controller_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::ta
       }
 
       let updated_adsb_data: ADSBData = result.json::<ADSBData>().await?;
-      let updated_adsb_position_data: Result<Vec<Position>, _> = updated_adsb_data.ac.into_iter().map(Position::try_from).collect();
+
+      let updated_adsb_position_data: Vec<Position> = updated_adsb_data.ac.clone()
+        .into_iter()
+        .map(Position::try_from)
+        .collect::<anyhow::Result<Vec<Position>>>()?;
+
+      let updated_adsb_label_data: Vec<Label> = updated_adsb_data.ac.clone()
+        .into_iter()
+        .map(Label::try_from)
+        .collect::<anyhow::Result<Vec<Label>>>()?;
       
       let updated_flights_data: FlightData = FlightData { 
-        flights: updated_adsb_position_data.unwrap() 
+        flights: updated_adsb_position_data,
+        labels: updated_adsb_label_data,
+        _adsb_data: updated_adsb_data,
       };
 
       {

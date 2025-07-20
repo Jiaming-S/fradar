@@ -19,8 +19,8 @@ pub async fn event_dispatch_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio
           },
           Event::Mouse(mouse_event) => {
             match mouse_event.kind {
-                crossterm::event::MouseEventKind::ScrollDown => change_radius(fradar_data.clone(), -5),
-                crossterm::event::MouseEventKind::ScrollUp => change_radius(fradar_data.clone(), 5),
+                crossterm::event::MouseEventKind::ScrollDown => change_radius(fradar_data.clone(), 0.8),
+                crossterm::event::MouseEventKind::ScrollUp => change_radius(fradar_data.clone(), 1.25),
                 _ => continue,
             }
           },
@@ -47,10 +47,10 @@ pub fn graceful_shutdown(fradar_data: Arc<Mutex<FRadarData>>) {
   crossterm::terminal::disable_raw_mode().unwrap();
 }
 
-pub fn change_radius(fradar_data: Arc<Mutex<FRadarData>>, delta: i32) {
+pub fn change_radius(fradar_data: Arc<Mutex<FRadarData>>, factor: f64) {
   {
     let fradar_radius: &mut u32 = &mut fradar_data.lock().unwrap().args.radius;
-    *fradar_radius = (*fradar_radius as i32 + delta).max(0) as u32;
+    *fradar_radius = (*fradar_radius as f64 * factor).max(1.0) as u32;
   }
 
   execute!(

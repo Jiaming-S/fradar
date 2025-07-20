@@ -1,6 +1,7 @@
-use std::{sync::{Arc, Mutex}, time::Duration};
+use std::{cmp::max, sync::{Arc, Mutex}, time::Duration};
 
 use chrono::{DateTime, Utc};
+use crossterm::{cursor, queue, style};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
@@ -31,12 +32,23 @@ pub struct FRadarArgs {
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct FlightData {
   pub flights: Vec<Position>,
+  pub labels: Vec<Label>,
+
+  pub _adsb_data: ADSBData,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub struct Position {
   pub lat: f64,
   pub long: f64,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+pub struct Label {
+  pub registration: String,
+  pub flight: String,
+  pub plane: String,
+  pub squawk: String,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
@@ -99,13 +111,48 @@ pub struct ADSBAircraftInformation {
 }
 
 impl TryFrom<ADSBAircraftInformation> for Position {
-  type Error = anyhow::Result<()>;
+  type Error = anyhow::Error;
 
   fn try_from(adsb_aircraft_info: ADSBAircraftInformation) -> Result<Self, Self::Error> {
     Ok(Position {
       lat: adsb_aircraft_info.lat,
       long: adsb_aircraft_info.lon,
     })
+  }
+}
+
+impl TryFrom<ADSBAircraftInformation> for Label {
+  type Error = anyhow::Error;
+
+  fn try_from(adsb_aircraft_info: ADSBAircraftInformation) -> Result<Self, Self::Error> {
+    Ok(Label {
+      registration: adsb_aircraft_info.r.unwrap_or_default(),
+      flight: adsb_aircraft_info.flight.unwrap_or_default(),
+      plane: adsb_aircraft_info.t.unwrap_or_default(),
+      squawk: adsb_aircraft_info.squawk.unwrap_or_default(),
+    })
+  }
+}
+
+impl Label {
+  pub fn draw_righthanded(&self, x: u16, y: u16) {
+    queue!(
+      std::io::stdout(),
+      cursor::MoveTo(x, y),
+      style::Print("\\"),
+      cursor::MoveTo(x, y + 1),
+      style::Print(self.registration.clone()),
+      cursor::MoveTo(x, y + 2),
+      style::Print(self.flight.clone()),
+      cursor::MoveTo(x, y + 3),
+      style::Print(self.plane.clone()),
+      // cursor::MoveTo(x, y + 4),
+      // style::Print(self.squawk.clone()),
+    ).unwrap();
+  }
+
+  pub fn len(&self) -> usize {
+    max(self.flight.len(), self.registration.len())
   }
 }
 

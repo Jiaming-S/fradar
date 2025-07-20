@@ -3,7 +3,7 @@ use std::{io::{Write}, sync::{Arc, Mutex}};
 use crossterm::{cursor, execute, queue, style::{self}, terminal::{size, Clear, ClearType}};
 use tokio::time::Instant;
 
-use crate::model::{FRadarArgs, FRadarData, FRadarState, FlightData, Position};
+use crate::model::{FRadarArgs, FRadarData, FRadarState, FlightData, Label, Position};
 
 
 pub async fn view_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<anyhow::Result<()>> {
@@ -118,20 +118,40 @@ fn draw_radar_layer(flights_data: Arc<Mutex<FlightData>>, args: FRadarArgs) -> a
 
   {
     let flights: Vec<Position> = flights_data.lock().unwrap().flights.clone();
-    for flight in flights {
-      let (col, row) = position_to_terminal_coords(flight, args);
+    let labels: Vec<Label> = flights_data.lock().unwrap().labels.clone();
+    let flights_terminal_pos: Vec<(f64, f64)> = flights.iter().map(|flight| position_to_terminal_pos(*flight, args)).collect();
+
+    for (i, flight) in flights_terminal_pos.clone().iter().enumerate() {
       queue!(
         std::io::stdout(),
-        cursor::MoveTo(col as u16, row as u16),
+        cursor::MoveTo(flight.0 as u16, flight.1 as u16),
         style::Print("•"),
       )?;
+
+      let mut do_label = true;
+      for other_flight in flights_terminal_pos.clone() {
+        if terminal_coord_within_box(
+          other_flight.0 as u16,
+          other_flight.1 as u16,
+          (flight.0 + 1.0) as u16,
+          (flight.1 + 1.0) as u16,
+          labels[i].len() as u16,
+          5) {
+          do_label = false;
+          break;
+        }
+      }
+
+      if do_label {
+        labels[i].draw_righthanded(flight.0 as u16 + 1, flight.1 as u16 + 1);
+      }
     }
   }
 
   Ok(())
 }
 
-fn position_to_terminal_coords(pos: Position, args: FRadarArgs) -> (f64, f64) {
+fn position_to_terminal_pos(pos: Position, args: FRadarArgs) -> (f64, f64) {
   let terminal_cols: f64 = size().unwrap().0.into();
   let terminal_rows: f64 = size().unwrap().1.into();
 
@@ -161,5 +181,13 @@ fn clamp_terminal_coords(col: f64, row: f64) -> (f64, f64) {
   let clamped_row = row.clamp(0.0, terminal_rows);
 
   (clamped_col, clamped_row)
+}
+
+fn terminal_coord_within_box(col: u16, row: u16, x: u16, y: u16, w: u16, h: u16) -> bool {
+  if col >= x && col <= x + w &&
+     row >= y && row <= y + h {
+    return true
+  }
+  false
 }
 
