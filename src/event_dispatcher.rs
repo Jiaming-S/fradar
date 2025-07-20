@@ -19,8 +19,8 @@ pub async fn event_dispatch_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio
           },
           Event::Mouse(mouse_event) => {
             match mouse_event.kind {
-                crossterm::event::MouseEventKind::ScrollDown => change_radius(fradar_data.clone(), -10),
-                crossterm::event::MouseEventKind::ScrollUp => change_radius(fradar_data.clone(), 10),
+                crossterm::event::MouseEventKind::ScrollDown => change_radius(fradar_data.clone(), -5),
+                crossterm::event::MouseEventKind::ScrollUp => change_radius(fradar_data.clone(), 5),
                 _ => continue,
             }
           },

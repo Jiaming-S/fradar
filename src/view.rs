@@ -41,7 +41,7 @@ pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> anyhow::Result<()> {
   draw_radar_layer(fradar_data_locked.flights_data.clone(), args)?;
 
   // Draw side borders.
-  draw_box_with_label(0, 0, terminal_cols, terminal_rows, "fradar".to_string())?;
+  draw_box_with_label(0, 0, terminal_cols, terminal_rows, " fradar ".to_string())?;
 
   // Draw center crosshair
   draw_crosshair()?;
