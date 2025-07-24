@@ -15,7 +15,7 @@ pub async fn controller_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::ta
 
       let args: FRadarArgs = fradar_data.lock().unwrap().args;
 
-      let url = format!("https://api.adsb.lol/v2/point/{}/{}/{}", args.origin.lat, args.origin.long, args.radius);
+      let url = format!("https://api.adsb.lol/v2/point/{:.4}/{:.4}/{}", args.origin.lat, args.origin.long, args.radius);
       let request_future = client
         .get(url)
         .header(reqwest::header::ACCEPT, "application/json")

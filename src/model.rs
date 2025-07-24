@@ -56,11 +56,11 @@ pub struct Position {
 }
 
 impl Position {
-  fn latlong_miles_ratio() -> f64 {
+  pub fn latlong_miles_ratio() -> f64 {
     69.44 // TODO: dynamically find value
   }
   
-  fn character_aspect_ratio() -> f64 {
+  pub fn character_aspect_ratio() -> f64 {
     2.0 // TODO: dynamically find value
   }
 
