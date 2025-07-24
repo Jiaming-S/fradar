@@ -1,4 +1,4 @@
-use std::{io::{Write}, sync::{Arc, Mutex}};
+use std::{collections::HashMap, io::Write, sync::{Arc, Mutex}};
 
 use crossterm::{cursor, execute, queue, style::{self}, terminal::{size, Clear, ClearType}};
 use tokio::time::Instant;
@@ -49,8 +49,8 @@ pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> anyhow::Result<()> {
   std::io::stdout().flush()?;
 
   let elapsed = start_time.elapsed();
-  if elapsed < args.frame_rate {
-    tokio::time::sleep(args.frame_rate - elapsed).await;
+  if elapsed < args.frame_interval {
+    tokio::time::sleep(args.frame_interval - elapsed).await;
   }
 
   Ok(())
@@ -114,80 +114,60 @@ fn draw_box(x: u16, y: u16, w: u16, h: u16) -> anyhow::Result<()> {
 }
 
 fn draw_radar_layer(flights_data: Arc<Mutex<FlightData>>, args: FRadarArgs) -> anyhow::Result<()> {
-  let (terminal_cols, terminal_rows) = size()?;
+  let sectorizer: &mut HashMap<(u16, u16), Vec<(f64, f64)>> = &mut HashMap::new();
 
-  {
-    let flights: Vec<Position> = flights_data.lock().unwrap().flights.clone();
-    let labels: Vec<Label> = flights_data.lock().unwrap().labels.clone();
-    let flights_terminal_pos: Vec<(f64, f64)> = flights.iter().map(|flight| position_to_terminal_pos(*flight, args)).collect();
+  { // First step: generate sectorizer hashmap to correctly get braille for sub-character drawing
+    let flights_data: Vec<(Position, Label)> = flights_data.lock().unwrap().flights.clone();
+    
+    let dots_coord: Vec<(u16, u16)> = flights_data.iter()
+      .map(|(position, _)| position.as_terminal_coord(args))
+      .collect();
+    let dots_coord_float: Vec<(f64, f64)> = flights_data.iter()
+      .map(|(position, _)| position.as_terminal_coord_float(args))
+      .collect();
 
-    for (i, flight) in flights_terminal_pos.clone().iter().enumerate() {
-      queue!(
-        std::io::stdout(),
-        cursor::MoveTo(flight.0 as u16, flight.1 as u16),
-        style::Print("•"),
-      )?;
+    let zipped_dots: Vec<((u16, u16), (f64, f64))> = dots_coord.iter()
+      .zip(dots_coord_float.iter())
+      .map(|((col, row), (col_float, row_float))| ((*col, *row), (*col_float, *row_float)))
+      .collect();
 
-      let mut do_label = true;
-      for other_flight in flights_terminal_pos.clone() {
-        if terminal_coord_within_box(
-          other_flight.0 as u16,
-          other_flight.1 as u16,
-          (flight.0 + 1.0) as u16,
-          (flight.1 + 1.0) as u16,
-          labels[i].len() as u16,
-          5) {
-          do_label = false;
-          break;
-        }
-      }
 
-      if do_label {
-        labels[i].draw_righthanded(flight.0 as u16 + 1, flight.1 as u16 + 1);
-      }
+    for (coord, coord_float) in zipped_dots {
+      sectorizer.entry(coord)
+        .or_insert_with(Vec::new)
+        .push(coord_float);
     }
+  }
+
+  for (sector, dots_coord_float) in sectorizer.iter() {
+    let braille_coords: Vec<(usize, usize)> = dots_coord_float.iter()
+      .map(|(col, row)| (((col - col.trunc()) * 2.0).trunc() as usize, ((row - row.trunc()) * 4.0).trunc() as usize))
+      .collect();
+
+    queue!(
+      std::io::stdout(),
+      cursor::MoveTo(sector.0, sector.1),
+      style::Print(generate_subchar_braille(&braille_coords)),
+    )?;
   }
 
   Ok(())
 }
 
-fn position_to_terminal_pos(pos: Position, args: FRadarArgs) -> (f64, f64) {
-  let terminal_cols: f64 = size().unwrap().0.into();
-  let terminal_rows: f64 = size().unwrap().1.into();
+fn generate_subchar_braille(braille_coords: &Vec<(usize, usize)>) -> char {
+  let braille_dots_raised: &mut [[bool; 2]; 4] = &mut [[false; 2]; 4];
+  braille_coords.iter().for_each(|(col, row)| braille_dots_raised[*row][*col] = true);
 
-  // Multiply delta_lat, delta_long by scale factor to get delta_col, delta_row
-  let latlong_to_miles: f64 = 69.44;
-  let char_aspect_ratio: f64 = 2.0; // TODO: dynamically find value
-  let lat_scale_factor: f64 = (f64::min(terminal_cols / 2.0, terminal_rows / 2.0)) / (args.radius as f64) * latlong_to_miles * char_aspect_ratio;
-  let long_scale_factor: f64 = (f64::min(terminal_cols / 2.0, terminal_rows / 2.0)) / (args.radius as f64) * latlong_to_miles;
+  let mut braille_unicode: u32 = 0;
+  let mut position = 0;
+  braille_dots_raised.as_flattened().iter().for_each(|&bit| {
+    if bit {
+      braille_unicode |= 1 << position;
+    }
 
-  let delta_lat = pos.lat - args.origin.lat;
-  let delta_long = pos.long - args.origin.long;
-  
-  let delta_cols = delta_lat * lat_scale_factor; 
-  let delta_rows = delta_long * long_scale_factor;
+    position += 1;
+  });
 
-  let col = terminal_cols / 2.0 + delta_cols;
-  let row = terminal_rows / 2.0 + delta_rows;
-
-  clamp_terminal_coords(col, row)
-}
-
-fn clamp_terminal_coords(col: f64, row: f64) -> (f64, f64) {
-  let terminal_cols: f64 = size().unwrap().0.into();
-  let terminal_rows: f64 = size().unwrap().1.into();
-
-  let clamped_col = col.clamp(0.0, terminal_cols);
-  let clamped_row = row.clamp(0.0, terminal_rows);
-
-  (clamped_col, clamped_row)
-}
-
-fn terminal_coord_within_box(col: u16, row: u16, x: u16, y: u16, w: u16, h: u16) -> bool {
-  if col >= x && col <= x + w &&
-     row >= y && row <= y + h {
-    return true
-  }
-  false
+  char::from_u32(10240 + braille_unicode).unwrap()
 }
 

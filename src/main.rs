@@ -1,4 +1,4 @@
-use std::{sync::{Arc, Mutex}, time::Duration};
+use std::{collections::VecDeque, sync::{Arc, Mutex}, time::Duration};
 
 use controller::controller_thread;
 use model::{FlightData, Position};
@@ -23,13 +23,15 @@ async fn main() -> anyhow::Result<()> {
             long: -122.3816,
         },
         radius: 50,
-        data_rate: Duration::from_millis((1.0 / 1.0 * 1000.0) as u64),
-        frame_rate: Duration::from_millis((1.0 / 4.0 * 1000.0) as u64),
-        event_rate: Duration::from_millis(200),
+        data_interval: Duration::from_millis((1.0 / 1.0 * 1000.0) as u64),
+        frame_interval: Duration::from_millis((1.0 / 4.0 * 1000.0) as u64),
+        event_interval: Duration::from_millis(100),
+        history_rolling_limit: 20,
     };
 
     let fradar_data: Arc<Mutex<FRadarData>> = Arc::new(Mutex::new(FRadarData {
         flights_data: Arc::new(Mutex::new(FlightData::default())),
+        flights_data_history: VecDeque::default(),
         state: FRadarState::default(),
         args: command_line_args,
     }));

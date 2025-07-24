@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use chrono::Utc;
 use tokio::time::{timeout, Instant};
 
 use crate::model::{ADSBData, FRadarArgs, FRadarData, FRadarState, FlightData, Label, Position};
@@ -20,7 +21,7 @@ pub async fn controller_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::ta
         .header(reqwest::header::ACCEPT, "application/json")
         .send();
 
-      let result = match timeout(args.data_rate, request_future).await {
+      let result = match timeout(args.data_interval, request_future).await {
         Ok(res) => res?,
         Err(_) => {
           // eprintln!("[{:?}] Request timed out (Exceeded {:?})", Utc::now().time(), args.data_rate);
@@ -47,11 +48,16 @@ pub async fn controller_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::ta
         .into_iter()
         .map(Label::try_from)
         .collect::<anyhow::Result<Vec<Label>>>()?;
+
+      let unified_data: Vec<(Position, Label)> = updated_adsb_position_data
+        .iter()
+        .zip(updated_adsb_label_data.iter())
+        .map(|(position, label)| (position.clone(), label.clone()))
+        .collect();
       
       let updated_flights_data: FlightData = FlightData { 
-        flights: updated_adsb_position_data,
-        labels: updated_adsb_label_data,
-        _adsb_data: updated_adsb_data,
+        flights: unified_data,
+        epoch_timestamp: Utc::now().timestamp_millis(),
       };
 
       {
@@ -62,8 +68,8 @@ pub async fn controller_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::ta
 
       // TODO: revisit this logic, do we need to force data rate?
       let elapsed = start_time.elapsed();
-      if elapsed < args.data_rate {
-        tokio::time::sleep(args.data_rate - elapsed).await;
+      if elapsed < args.data_interval {
+        tokio::time::sleep(args.data_interval - elapsed).await;
       }
     }
 

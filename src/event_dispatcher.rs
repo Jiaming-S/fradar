@@ -9,7 +9,7 @@ pub async fn event_dispatch_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio
     while fradar_data.lock().unwrap().state != FRadarState::GracefulKill {
       let args: FRadarArgs = fradar_data.lock().unwrap().args;
 
-      if poll(args.event_rate)? {
+      if poll(args.event_interval)? {
         match read()? {
           Event::Key(key_event) => {
             match key_event.code {

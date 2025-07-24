@@ -64,26 +64,26 @@ impl Position {
     2.0 // TODO: dynamically find value
   }
 
-  pub fn is_terminal_coord_in_box(&self, x: u16, y: u16, w: u16, h: u16, args: FRadarArgs) -> anyhow::Result<bool> {
-    let (col, row) = self.as_terminal_coord(args)?;
-    Ok(col >= x && col <= x + w && row >= y && row <= y + h)
+  pub fn is_terminal_coord_in_box(&self, x: u16, y: u16, w: u16, h: u16, args: FRadarArgs) -> bool {
+    let (col, row) = self.as_terminal_coord(args);
+    col >= x && col <= x + w && row >= y && row <= y + h
   }
 
-  pub fn as_terminal_coord(&self, args: FRadarArgs) -> anyhow::Result<(u16, u16)> {
-    let (col_float, row_float) = self.as_terminal_coord_float(args)?;
-    Ok((col_float as u16, row_float as u16))
+  pub fn as_terminal_coord(&self, args: FRadarArgs) -> (u16, u16) {
+    let (col_float, row_float) = self.as_terminal_coord_float(args);
+    (col_float as u16, row_float as u16)
   }
 
-  pub fn as_terminal_coord_float(&self, args: FRadarArgs) -> anyhow::Result<(f64, f64)> {
-    let terminal_cols: f64 = size()?.0.into();
-    let terminal_rows: f64 = size()?.1.into();
+  pub fn as_terminal_coord_float(&self, args: FRadarArgs) -> (f64, f64) {
+    let terminal_cols: f64 = size().unwrap().0.into();
+    let terminal_rows: f64 = size().unwrap().1.into();
   
-    let latlong_to_miles: f64 = Self::latlong_miles_ratio();      // TODO: dynamically find value
+    let latlong_to_miles: f64  = Self::latlong_miles_ratio();     // TODO: dynamically find value
     let char_aspect_ratio: f64 = Self::character_aspect_ratio();  // TODO: dynamically find value
-    let lat_scale_factor: f64 = (f64::min(terminal_cols / 2.0, terminal_rows / 2.0)) / (args.radius as f64) * latlong_to_miles * char_aspect_ratio;
+    let lat_scale_factor: f64  = (f64::min(terminal_cols / 2.0, terminal_rows / 2.0)) / (args.radius as f64) * latlong_to_miles * char_aspect_ratio;
     let long_scale_factor: f64 = (f64::min(terminal_cols / 2.0, terminal_rows / 2.0)) / (args.radius as f64) * latlong_to_miles;
 
-    let delta_lat = self.lat - args.origin.lat;
+    let delta_lat  = self.lat - args.origin.lat;
     let delta_long = self.long - args.origin.long;
     
     let delta_cols = delta_lat * lat_scale_factor; 
@@ -95,7 +95,7 @@ impl Position {
     let clamped_col = col.clamp(0.0, terminal_cols);
     let clamped_row = row.clamp(0.0, terminal_rows);
 
-    Ok((clamped_col, clamped_row))
+    (clamped_col, clamped_row)
   }
 }
 
