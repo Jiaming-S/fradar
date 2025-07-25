@@ -178,17 +178,17 @@ fn label_engine(flights_data: Vec<(Position, Label)>, args: FRadarArgs) -> std::
       pushed_row -= 1.0;
       
       // Simulate inverse gravitational forces
-      for (other_position, _) in flights_data.clone() {
-        let hypot_squared: f64 = position.terminal_coord_squared_distance(&other_position, args);
-        if hypot_squared > 0.1 {
-          pushed_col -= args.label_point_repelling_force *
-            (other_position.as_terminal_coord_float(args).0 - pushed_col) /
-            hypot_squared;
-          pushed_row -= args.label_point_repelling_force *
-            (other_position.as_terminal_coord_float(args).1 - pushed_row) /
-            hypot_squared;
-        }
-      }
+      // for (other_position, _) in flights_data.clone() {
+      //   let hypot_squared: f64 = position.terminal_coord_squared_distance(&other_position, args);
+      //   if hypot_squared > 0.1 {
+      //     pushed_col -= args.label_point_repelling_force *
+      //       (other_position.as_terminal_coord_float(args).0 - pushed_col) /
+      //       hypot_squared;
+      //     pushed_row -= args.label_point_repelling_force *
+      //       (other_position.as_terminal_coord_float(args).1 - pushed_row) /
+      //       hypot_squared;
+      //   }
+      // }
 
       let (original_col, original_row) = position.as_terminal_coord_float(args);
       let label_position = match (pushed_col - original_col, pushed_row - original_row) {
@@ -201,8 +201,8 @@ fn label_engine(flights_data: Vec<(Position, Label)>, args: FRadarArgs) -> std::
 
       let (del_col, del_row) = label.compute_display_delta(label_position);
       let (res_col, res_row) = (del_col as f64 + original_col, del_row as f64 + original_row);
-      if res_col < 0.0 || res_col + label.len() as f64 > terminal_cols as f64 ||
-         res_row < 0.0 || res_row + label.height() as f64 > terminal_rows as f64 {
+      if res_col < 3.0 || res_col + label.len() as f64 > -3.0 + terminal_cols as f64 ||
+         res_row < 3.0 || res_row + label.height() as f64 > -3.0 + terminal_rows as f64 {
         continue;
       }
 

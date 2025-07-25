@@ -1,7 +1,7 @@
-use std::{cmp::max, collections::VecDeque, sync::{Arc, Mutex}, time::Duration};
+use std::{collections::VecDeque, sync::{Arc, Mutex}, time::Duration};
 
 use chrono::{DateTime, Utc};
-use crossterm::{cursor, queue, style, terminal::size};
+use crossterm::{terminal::size};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
@@ -34,7 +34,7 @@ pub enum FRadarState {
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub struct FRadarArgs {
   pub origin: Position,
-  pub radius: u32,
+  pub radius: f64,
 
   pub data_interval: Duration,
   pub frame_interval: Duration,

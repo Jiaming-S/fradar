@@ -51,8 +51,8 @@ pub fn graceful_shutdown(fradar_data: Arc<Mutex<FRadarData>>) {
 
 pub fn change_radius(fradar_data: Arc<Mutex<FRadarData>>, factor: f64) {
   {
-    let fradar_radius: &mut u32 = &mut fradar_data.lock().unwrap().args.radius;
-    *fradar_radius = (*fradar_radius as f64 * factor).max(1.0).ceil() as u32;
+    let fradar_radius: &mut f64 = &mut fradar_data.lock().unwrap().args.radius;
+    *fradar_radius = *fradar_radius as f64 * factor;
   }
 
   execute!(
