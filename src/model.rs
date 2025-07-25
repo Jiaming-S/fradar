@@ -219,32 +219,34 @@ impl Label {
     }
   }
 
-  pub fn all_fields(&self) -> Vec<String> {
-    Vec::from([
+  pub fn all_notna_fields(&self) -> Vec<String> {
+    let mut result = Vec::from([
       self.registration.clone(),
       self.flight.clone(),
       self.plane.clone(),
       self.squawk.clone(),
-    ])
+    ]);
+    result.retain(|str| str.len() > 0);
+    result
   }
 
   pub fn len(&self) -> usize {
-    self.all_fields().iter().map(|str| str.len()).max().unwrap_or(0)
+    self.all_notna_fields().iter().map(|str| str.len()).max().unwrap_or(0)
   }
 
   pub fn height(&self) -> usize {
-    self.all_fields().len()
+    self.all_notna_fields().len()
   }
 
   fn lefthanded_string(&self) -> String {
-    self.all_fields().iter()
+    self.all_notna_fields().iter()
       .map(|str| format!("{:>width$}", str, width = self.len()))
       .collect::<Vec<String>>()
       .join("\n")
   }
 
   fn righthanded_string(&self) -> String {
-    self.all_fields().join("\n")
+    self.all_notna_fields().join("\n")
   }
 
   pub fn compute_display_delta(&self, label_position: LabelPosition) -> (i32, i32) {
