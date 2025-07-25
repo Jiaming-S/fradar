@@ -221,19 +221,24 @@ fn label_engine(flights_data: Vec<(Position, Label)>, args: FRadarArgs) -> std::
 }
 
 fn generate_subchar_braille(braille_coords: &Vec<(usize, usize)>) -> char {
-  let braille_dots_raised: &mut [[bool; 2]; 4] = &mut [[false; 2]; 4];
-  braille_coords.iter().for_each(|(col, row)| braille_dots_raised[*row][*col] = true);
-
   let mut braille_unicode: u32 = 0;
-  let mut position = 0;
-  braille_dots_raised.as_flattened().iter().for_each(|&bit| {
-    if bit {
-      braille_unicode |= 1 << position;
-    }
 
-    position += 1;
-  });
+  for &(col, row) in braille_coords {
+    let bit_index = match (col, row) {
+      (0, 0) => 0,
+      (0, 1) => 1,
+      (0, 2) => 2,
+      (1, 0) => 3,
+      (1, 1) => 4,
+      (1, 2) => 5,
+      (0, 3) => 6,
+      (1, 3) => 7,
+      _ => continue,
+    };
 
-  char::from_u32(10240 + braille_unicode).unwrap()
+    braille_unicode |= 1 << bit_index;
+  }
+
+  char::from_u32(0x2800 + braille_unicode).unwrap_or(' ')
 }
 
