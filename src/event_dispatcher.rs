@@ -1,35 +1,33 @@
 use std::sync::{Arc, Mutex};
 
-use crossterm::{event::{poll, read, Event, KeyCode}, execute, terminal::size};
+use crossterm::{event::{read, Event, KeyCode}, execute, terminal::size};
 
 use crate::model::{FRadarArgs, FRadarData, FRadarState, Position};
 
 pub async fn event_dispatch_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<anyhow::Result<()>> {
-  tokio::spawn(async move {
+  tokio::task::spawn_blocking(move || {
     while fradar_data.lock().unwrap().state != FRadarState::GracefulKill {
       let args: FRadarArgs = fradar_data.lock().unwrap().args;
 
-      if poll(args.event_interval)? {
-        match read()? {
-          Event::Key(key_event) => {
-            match key_event.code {
-              KeyCode::Delete | KeyCode::Esc | KeyCode::End | KeyCode::Char('q') => graceful_shutdown(fradar_data.clone()),
-              KeyCode::Char('w') | KeyCode::Up    => change_origin(fradar_data.clone(), 0.0, -long_per_pixel(args)),
-              KeyCode::Char('a') | KeyCode::Left  => change_origin(fradar_data.clone(), -lat_per_pixel(args), 0.0),
-              KeyCode::Char('s') | KeyCode::Down  => change_origin(fradar_data.clone(), 0.0, long_per_pixel(args)),
-              KeyCode::Char('d') | KeyCode::Right => change_origin(fradar_data.clone(), lat_per_pixel(args), 0.0),
+      match read()? {
+        Event::Key(key_event) => {
+          match key_event.code {
+            KeyCode::Delete | KeyCode::Esc | KeyCode::End | KeyCode::Char('q') => graceful_shutdown(fradar_data.clone()),
+            KeyCode::Char('w') | KeyCode::Up    => change_origin(fradar_data.clone(), 0.0, -long_per_pixel(args)),
+            KeyCode::Char('a') | KeyCode::Left  => change_origin(fradar_data.clone(), -lat_per_pixel(args), 0.0),
+            KeyCode::Char('s') | KeyCode::Down  => change_origin(fradar_data.clone(), 0.0, long_per_pixel(args)),
+            KeyCode::Char('d') | KeyCode::Right => change_origin(fradar_data.clone(), lat_per_pixel(args), 0.0),
+            _ => continue,
+          }
+        },
+        Event::Mouse(mouse_event) => {
+          match mouse_event.kind {
+              crossterm::event::MouseEventKind::ScrollDown => change_radius(fradar_data.clone(), 0.8),
+              crossterm::event::MouseEventKind::ScrollUp => change_radius(fradar_data.clone(), 1.25),
               _ => continue,
-            }
-          },
-          Event::Mouse(mouse_event) => {
-            match mouse_event.kind {
-                crossterm::event::MouseEventKind::ScrollDown => change_radius(fradar_data.clone(), 0.8),
-                crossterm::event::MouseEventKind::ScrollUp => change_radius(fradar_data.clone(), 1.25),
-                _ => continue,
-            }
-          },
-          _ => {},
-        }
+          }
+        },
+        _ => {},
       }
     }
 

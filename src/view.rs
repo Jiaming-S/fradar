@@ -62,7 +62,7 @@ fn draw_crosshair() -> anyhow::Result<()> {
   queue!(
     std::io::stdout(),
     cursor::MoveTo(terminal_cols / 2, terminal_rows / 2),
-    style::Print("⌖"),
+    style::Print("●︎"),
   )?;
 
   Ok(())
@@ -72,7 +72,8 @@ fn draw_box_with_label(x: u16, y: u16, w: u16, h: u16, label: String) -> anyhow:
   draw_box(x, y, w, h)?;
   queue!(
     std::io::stdout(),
-    cursor::MoveTo(x + w / 2 - label.len() as u16 / 2, y),
+    // cursor::MoveTo(x + w / 2 - label.len() as u16 / 2, y),
+    cursor::MoveTo(x + 2, y),
     style::Print(label),
   )?;
 
