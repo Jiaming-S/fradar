@@ -1,9 +1,9 @@
-use std::{io::{Write}, sync::{Arc, Mutex}};
+use std::{collections::HashMap, io::Write, sync::{Arc, Mutex}};
 
 use crossterm::{cursor, execute, queue, style::{self}, terminal::{size, Clear, ClearType}};
-use tokio::time::Instant;
+use tokio::{time::Instant};
 
-use crate::model::{FRadarArgs, FRadarData, FRadarState, FlightData, Label, Position};
+use crate::model::{FRadarArgs, FRadarData, FRadarState, FlightData, Label, LabelPosition, Position};
 
 
 pub async fn view_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<anyhow::Result<()>> {
@@ -33,12 +33,18 @@ pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> anyhow::Result<()> {
     Clear(ClearType::All),
   )?;
   
-  let fradar_data_locked: FRadarData = fradar_data.lock().unwrap().clone();
-  let args: FRadarArgs = fradar_data_locked.args;
   let (terminal_cols, terminal_rows) = size()?;
+  let args: FRadarArgs;
 
-  // Draw planes as dots on a radar.
-  draw_radar_layer(fradar_data_locked.flights_data.clone(), args)?;
+  {
+    let fradar_data_locked: FRadarData = fradar_data.lock().unwrap().clone();
+    let flights_data: Arc<Mutex<FlightData>> = fradar_data_locked.flights_data;
+    args = fradar_data_locked.args;
+
+
+    // Draw planes as dots on a radar.
+    draw_radar_layer(flights_data.clone(), args)?;
+  }
 
   // Draw side borders.
   draw_box_with_label(0, 0, terminal_cols, terminal_rows, " fradar ".to_string())?;
@@ -49,8 +55,8 @@ pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> anyhow::Result<()> {
   std::io::stdout().flush()?;
 
   let elapsed = start_time.elapsed();
-  if elapsed < args.frame_rate {
-    tokio::time::sleep(args.frame_rate - elapsed).await;
+  if elapsed < args.frame_interval {
+    tokio::time::sleep(args.frame_interval - elapsed).await;
   }
 
   Ok(())
@@ -62,7 +68,7 @@ fn draw_crosshair() -> anyhow::Result<()> {
   queue!(
     std::io::stdout(),
     cursor::MoveTo(terminal_cols / 2, terminal_rows / 2),
-    style::Print("⌖"),
+    style::Print("●︎"),
   )?;
 
   Ok(())
@@ -72,7 +78,8 @@ fn draw_box_with_label(x: u16, y: u16, w: u16, h: u16, label: String) -> anyhow:
   draw_box(x, y, w, h)?;
   queue!(
     std::io::stdout(),
-    cursor::MoveTo(x + w / 2 - label.len() as u16 / 2, y),
+    // cursor::MoveTo(x + w / 2 - label.len() as u16 / 2, y),
+    cursor::MoveTo(x + 2, y),
     style::Print(label),
   )?;
 
@@ -114,80 +121,119 @@ fn draw_box(x: u16, y: u16, w: u16, h: u16) -> anyhow::Result<()> {
 }
 
 fn draw_radar_layer(flights_data: Arc<Mutex<FlightData>>, args: FRadarArgs) -> anyhow::Result<()> {
-  let (terminal_cols, terminal_rows) = size()?;
+  let flights_data: Vec<(Position, Label)> = flights_data.lock().unwrap().flights.clone();
 
-  {
-    let flights: Vec<Position> = flights_data.lock().unwrap().flights.clone();
-    let labels: Vec<Label> = flights_data.lock().unwrap().labels.clone();
-    let flights_terminal_pos: Vec<(f64, f64)> = flights.iter().map(|flight| position_to_terminal_pos(*flight, args)).collect();
+  // Preemptive step: spin up label engine
+  let label_engine_handle = label_engine(flights_data.clone(), args);
 
-    for (i, flight) in flights_terminal_pos.clone().iter().enumerate() {
-      queue!(
-        std::io::stdout(),
-        cursor::MoveTo(flight.0 as u16, flight.1 as u16),
-        style::Print("•"),
-      )?;
+  // First step: generate sectorizer hashmap to correctly get braille for sub-character drawing
+  let sectorizer: &mut HashMap<(u16, u16), Vec<(f64, f64)>> = &mut HashMap::new();
 
-      let mut do_label = true;
-      for other_flight in flights_terminal_pos.clone() {
-        if terminal_coord_within_box(
-          other_flight.0 as u16,
-          other_flight.1 as u16,
-          (flight.0 + 1.0) as u16,
-          (flight.1 + 1.0) as u16,
-          labels[i].len() as u16,
-          5) {
-          do_label = false;
-          break;
-        }
-      }
+  let dots_coord: Vec<(u16, u16)> = flights_data.iter()
+    .map(|(position, _)| position.as_terminal_coord(args))
+    .collect();
+  let dots_coord_float: Vec<(f64, f64)> = flights_data.iter()
+    .map(|(position, _)| position.as_terminal_coord_float(args))
+    .collect();
 
-      if do_label {
-        labels[i].draw_righthanded(flight.0 as u16 + 1, flight.1 as u16 + 1);
-      }
-    }
+  let zipped_dots: Vec<((u16, u16), (f64, f64))> = dots_coord.iter()
+    .zip(dots_coord_float.iter())
+    .map(|((col, row), (col_float, row_float))| ((*col, *row), (*col_float, *row_float)))
+    .collect();
+
+  for (coord, coord_float) in zipped_dots {
+    sectorizer.entry(coord)
+      .or_insert_with(Vec::new)
+      .push(coord_float);
   }
+
+  // Second step: using sectorizer hashmap, determine what braille character to display, and queue draw to stdout
+  for (sector, dots_coord_float) in sectorizer.iter() {
+    let braille_coords: Vec<(usize, usize)> = dots_coord_float.iter()
+      .map(|(col, row)| (((col - col.trunc()) * 2.0).trunc() as usize, ((row - row.trunc()) * 4.0).trunc() as usize))
+      .collect();
+
+    queue!(
+      std::io::stdout(),
+      cursor::MoveTo(sector.0, sector.1),
+      style::Print(generate_subchar_braille(&braille_coords)),
+    )?;
+  }
+
+  // Third step: join label engine thread
+  label_engine_handle.join().unwrap()?;
 
   Ok(())
 }
 
-fn position_to_terminal_pos(pos: Position, args: FRadarArgs) -> (f64, f64) {
-  let terminal_cols: f64 = size().unwrap().0.into();
-  let terminal_rows: f64 = size().unwrap().1.into();
+fn label_engine(flights_data: Vec<(Position, Label)>, args: FRadarArgs) -> std::thread::JoinHandle<anyhow::Result<()>> {
+  std::thread::spawn(move || -> anyhow::Result<()> {
+    let (terminal_cols, terminal_rows) = size()?;
 
-  // Multiply delta_lat, delta_long by scale factor to get delta_col, delta_row
-  let latlong_to_miles: f64 = 69.44;
-  let char_aspect_ratio: f64 = 2.0; // TODO: dynamically find value
-  let lat_scale_factor: f64 = (f64::min(terminal_cols / 2.0, terminal_rows / 2.0)) / (args.radius as f64) * latlong_to_miles * char_aspect_ratio;
-  let long_scale_factor: f64 = (f64::min(terminal_cols / 2.0, terminal_rows / 2.0)) / (args.radius as f64) * latlong_to_miles;
+    for (position, label) in flights_data.clone() {
+      let (mut pushed_col, mut pushed_row) = position.as_terminal_coord_float(args);
 
-  let delta_lat = pos.lat - args.origin.lat;
-  let delta_long = pos.long - args.origin.long;
-  
-  let delta_cols = delta_lat * lat_scale_factor; 
-  let delta_rows = delta_long * long_scale_factor;
+      // Initialize to the "top right"
+      pushed_col += 1.0;
+      pushed_row -= 1.0;
+      
+      // Simulate inverse gravitational forces
+      // for (other_position, _) in flights_data.clone() {
+      //   let hypot_squared: f64 = position.terminal_coord_squared_distance(&other_position, args);
+      //   if hypot_squared > 0.1 {
+      //     pushed_col -= args.label_point_repelling_force *
+      //       (other_position.as_terminal_coord_float(args).0 - pushed_col) /
+      //       hypot_squared;
+      //     pushed_row -= args.label_point_repelling_force *
+      //       (other_position.as_terminal_coord_float(args).1 - pushed_row) /
+      //       hypot_squared;
+      //   }
+      // }
 
-  let col = terminal_cols / 2.0 + delta_cols;
-  let row = terminal_rows / 2.0 + delta_rows;
+      let (original_col, original_row) = position.as_terminal_coord_float(args);
+      let label_position = match (pushed_col - original_col, pushed_row - original_row) {
+        (dc, dr) if (dc > 0.0 && dr > 0.0) => LabelPosition::BottomRight,
+        (dc, dr) if (dc < 0.0 && dr > 0.0) => LabelPosition::BottomLeft,
+        (dc, dr) if (dc > 0.0 && dr < 0.0) => LabelPosition::TopRight,
+        (dc, dr) if (dc < 0.0 && dr < 0.0) => LabelPosition::TopLeft,
+        (_, _) => LabelPosition::default(),
+      };
 
-  clamp_terminal_coords(col, row)
+      let (del_col, del_row) = label.compute_display_delta(label_position);
+      let (res_col, res_row) = (del_col as f64 + original_col, del_row as f64 + original_row);
+      if res_col < 3.0 || res_col + label.len() as f64 > -3.0 + terminal_cols as f64 ||
+         res_row < 3.0 || res_row + label.height() as f64 > -3.0 + terminal_rows as f64 {
+        continue;
+      }
+
+      let label_string: String = label.to_string(label_position);
+      label_string.split("\n").enumerate().for_each(|(ind, str)| {
+          queue!(
+            std::io::stdout(),
+            cursor::MoveTo(res_col as u16, (res_row as usize + ind) as u16),
+            style::Print(str),
+          ).unwrap()
+      });
+    }
+
+    Ok(())
+  })
 }
 
-fn clamp_terminal_coords(col: f64, row: f64) -> (f64, f64) {
-  let terminal_cols: f64 = size().unwrap().0.into();
-  let terminal_rows: f64 = size().unwrap().1.into();
+fn generate_subchar_braille(braille_coords: &Vec<(usize, usize)>) -> char {
+  let braille_dots_raised: &mut [[bool; 2]; 4] = &mut [[false; 2]; 4];
+  braille_coords.iter().for_each(|(col, row)| braille_dots_raised[*row][*col] = true);
 
-  let clamped_col = col.clamp(0.0, terminal_cols);
-  let clamped_row = row.clamp(0.0, terminal_rows);
+  let mut braille_unicode: u32 = 0;
+  let mut position = 0;
+  braille_dots_raised.as_flattened().iter().for_each(|&bit| {
+    if bit {
+      braille_unicode |= 1 << position;
+    }
 
-  (clamped_col, clamped_row)
-}
+    position += 1;
+  });
 
-fn terminal_coord_within_box(col: u16, row: u16, x: u16, y: u16, w: u16, h: u16) -> bool {
-  if col >= x && col <= x + w &&
-     row >= y && row <= y + h {
-    return true
-  }
-  false
+  char::from_u32(10240 + braille_unicode).unwrap()
 }
 
