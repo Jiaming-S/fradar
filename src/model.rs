@@ -90,8 +90,8 @@ impl Position {
     let delta_lat  = self.lat - args.origin.lat;
     let delta_long = self.long - args.origin.long;
     
-    let delta_cols = delta_lat * lat_scale_factor; 
-    let delta_rows = delta_long * long_scale_factor;
+    let delta_rows = -delta_lat * lat_scale_factor;
+    let delta_cols =  delta_long * long_scale_factor;
 
     let col = terminal_cols / 2.0 + delta_cols;
     let row = terminal_rows / 2.0 + delta_rows;
