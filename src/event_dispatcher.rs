@@ -13,10 +13,10 @@ pub async fn event_dispatch_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio
         Event::Key(key_event) => {
           match key_event.code {
             KeyCode::Delete | KeyCode::Esc | KeyCode::End | KeyCode::Char('q') => graceful_shutdown(fradar_data.clone()),
-            KeyCode::Char('w') | KeyCode::Up    => change_origin(fradar_data.clone(), 0.0, -long_per_pixel(args)),
-            KeyCode::Char('a') | KeyCode::Left  => change_origin(fradar_data.clone(), -lat_per_pixel(args), 0.0),
-            KeyCode::Char('s') | KeyCode::Down  => change_origin(fradar_data.clone(), 0.0, long_per_pixel(args)),
-            KeyCode::Char('d') | KeyCode::Right => change_origin(fradar_data.clone(), lat_per_pixel(args), 0.0),
+            KeyCode::Char('w') | KeyCode::Up    => change_origin(fradar_data.clone(),  lat_per_pixel(args),  0.0),
+            KeyCode::Char('s') | KeyCode::Down  => change_origin(fradar_data.clone(), -lat_per_pixel(args),  0.0),
+            KeyCode::Char('a') | KeyCode::Left  => change_origin(fradar_data.clone(),  0.0, -long_per_pixel(args)),
+            KeyCode::Char('d') | KeyCode::Right => change_origin(fradar_data.clone(),  0.0,  long_per_pixel(args)),
             _ => continue,
           }
         },
