@@ -26,6 +26,11 @@ async fn main() -> anyhow::Result<()> {
         data_interval: Duration::from_millis((1.0 / 1.0 * 1000.0) as u64),
         frame_interval: Duration::from_millis((1.0 / 4.0 * 1000.0) as u64),
         event_interval: Duration::from_millis(100),
+
+        label_label_repelling_force: 4.0,
+        label_point_repelling_force: 4.0,
+        label_snapping_radius: 2.0,
+
         history_rolling_limit: 20,
     };
 

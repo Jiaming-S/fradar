@@ -40,6 +40,10 @@ pub struct FRadarArgs {
   pub frame_interval: Duration,
   pub event_interval: Duration,
 
+  pub label_label_repelling_force: f64,
+  pub label_point_repelling_force: f64,
+  pub label_snapping_radius: f64,
+
   pub history_rolling_limit: usize,
 }
 
@@ -97,6 +101,12 @@ impl Position {
 
     (clamped_col, clamped_row)
   }
+
+  pub fn terminal_coord_squared_distance(&self, other: &Self, args: FRadarArgs) -> f64 {
+    let (c1, r1) = self.as_terminal_coord_float(args);
+    let (c2, r2) = other.as_terminal_coord_float(args);
+    (c1 - c2).powi(2) + (r1 - r2).powi(2)
+  }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
@@ -105,6 +115,15 @@ pub struct Label {
   pub flight: String,
   pub plane: String,
   pub squawk: String,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
+pub enum LabelPosition {
+  TopLeft,
+  #[default]
+  TopRight,
+  BottomLeft,
+  BottomRight,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
@@ -191,24 +210,50 @@ impl TryFrom<ADSBAircraftInformation> for Label {
 }
 
 impl Label {
-  pub fn draw_righthanded(&self, x: u16, y: u16) {
-    queue!(
-      std::io::stdout(),
-      cursor::MoveTo(x, y),
-      style::Print("\\"),
-      cursor::MoveTo(x, y + 1),
-      style::Print(self.registration.clone()),
-      cursor::MoveTo(x, y + 2),
-      style::Print(self.flight.clone()),
-      cursor::MoveTo(x, y + 3),
-      style::Print(self.plane.clone()),
-      // cursor::MoveTo(x, y + 4),
-      // style::Print(self.squawk.clone()),
-    ).unwrap();
+  pub fn to_string(&self, label_position: LabelPosition) -> String {
+    match label_position {
+      LabelPosition::TopLeft => format!("{}\n{:>width$}", self.lefthanded_string(), "\\", width = self.len()),
+      LabelPosition::TopRight => format!("{}\n/", self.righthanded_string()),
+      LabelPosition::BottomLeft => format!("{:>width$}\n{}", "/", self.lefthanded_string(), width = self.len()),
+      LabelPosition::BottomRight => format!("\\\n{}", self.righthanded_string()),
+    }
+  }
+
+  pub fn all_fields(&self) -> Vec<String> {
+    Vec::from([
+      self.registration.clone(),
+      self.flight.clone(),
+      self.plane.clone(),
+      self.squawk.clone(),
+    ])
   }
 
   pub fn len(&self) -> usize {
-    max(self.flight.len(), self.registration.len())
+    self.all_fields().iter().map(|str| str.len()).max().unwrap_or(0)
+  }
+
+  pub fn height(&self) -> usize {
+    self.all_fields().len()
+  }
+
+  fn lefthanded_string(&self) -> String {
+    self.all_fields().iter()
+      .map(|str| format!("{:>width$}", str, width = self.len()))
+      .collect::<Vec<String>>()
+      .join("\n")
+  }
+
+  fn righthanded_string(&self) -> String {
+    self.all_fields().join("\n")
+  }
+
+  pub fn compute_display_delta(&self, label_position: LabelPosition) -> (i32, i32) {
+    match label_position {
+      LabelPosition::TopLeft => (-1 - self.len() as i32, -1 - self.height() as i32),
+      LabelPosition::TopRight => (1, -1 - self.height() as i32),
+      LabelPosition::BottomLeft => (-1 - self.len() as i32, 1),
+      LabelPosition::BottomRight => (1, 1),
+    }
   }
 }
 
