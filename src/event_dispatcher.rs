@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use crossterm::{event::{read, Event, KeyCode}, execute, terminal::size};
+use crossterm::{event::{read, Event, KeyCode}, execute};
 
 use crate::model::{FRadarArgs, FRadarData, FRadarState, Position};
 
@@ -13,10 +13,10 @@ pub async fn event_dispatch_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio
         Event::Key(key_event) => {
           match key_event.code {
             KeyCode::Delete | KeyCode::Esc | KeyCode::End | KeyCode::Char('q') => graceful_shutdown(fradar_data.clone()),
-            KeyCode::Char('w') | KeyCode::Up    => change_origin(fradar_data.clone(),  lat_per_pixel(args),  0.0),
-            KeyCode::Char('s') | KeyCode::Down  => change_origin(fradar_data.clone(), -lat_per_pixel(args),  0.0),
-            KeyCode::Char('a') | KeyCode::Left  => change_origin(fradar_data.clone(),  0.0, -long_per_pixel(args)),
-            KeyCode::Char('d') | KeyCode::Right => change_origin(fradar_data.clone(),  0.0,  long_per_pixel(args)),
+            KeyCode::Char('w') | KeyCode::Up    => change_origin(fradar_data.clone(),  lat_per_pixel(&args),  0.0),
+            KeyCode::Char('s') | KeyCode::Down  => change_origin(fradar_data.clone(), -lat_per_pixel(&args),  0.0),
+            KeyCode::Char('a') | KeyCode::Left  => change_origin(fradar_data.clone(),  0.0, -long_per_pixel(&args)),
+            KeyCode::Char('d') | KeyCode::Right => change_origin(fradar_data.clone(),  0.0,  long_per_pixel(&args)),
             _ => continue,
           }
         },
@@ -76,15 +76,16 @@ pub fn change_origin(fradar_data: Arc<Mutex<FRadarData>>, delta_lat: f64, delta_
   ).unwrap();
 }
 
-fn lat_per_pixel(args: FRadarArgs) -> f64 {
-  let terminal_cols: f64 = size().unwrap().0.into();
-  let terminal_rows: f64 = size().unwrap().1.into();
-  (args.radius as f64) / Position::latlong_miles_ratio() / (f64::min(terminal_cols / 2.0, terminal_rows / 2.0)) / Position::character_aspect_ratio()
+fn lat_per_pixel(args: &FRadarArgs) -> f64 {
+  (args.radius as f64) /
+    Position::latlong_miles_ratio() /
+    (f64::min(args.terminal_cols as f64 / 2.0, args.terminal_rows as f64 / 2.0)) /
+    Position::character_aspect_ratio()
 }
 
-fn long_per_pixel(args: FRadarArgs) -> f64 {
-  let terminal_cols: f64 = size().unwrap().0.into();
-  let terminal_rows: f64 = size().unwrap().1.into();
-  (args.radius as f64) / Position::latlong_miles_ratio() / (f64::min(terminal_cols / 2.0, terminal_rows / 2.0))
+fn long_per_pixel(args: &FRadarArgs) -> f64 {
+  (args.radius as f64) /
+    Position::latlong_miles_ratio() /
+    (f64::min(args.terminal_cols as f64 / 2.0, args.terminal_rows as f64 / 2.0))
 }
 

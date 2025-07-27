@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io::Write, sync::{Arc, Mutex}};
 
-use crossterm::{cursor, execute, queue, style::{self}, terminal::{size, Clear, ClearType}};
+use crossterm::{cursor, execute, queue, style::{self}, terminal::{Clear, ClearType}};
 use tokio::{time::Instant};
 
 use crate::model::{FRadarArgs, FRadarData, FRadarState, FlightData, Label, LabelPosition, Position};
@@ -33,7 +33,6 @@ pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> anyhow::Result<()> {
     Clear(ClearType::All),
   )?;
   
-  let (terminal_cols, terminal_rows) = size()?;
   let args: FRadarArgs;
 
   {
@@ -47,10 +46,10 @@ pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> anyhow::Result<()> {
   }
 
   // Draw side borders.
-  draw_box_with_label(0, 0, terminal_cols, terminal_rows, " fradar ".to_string())?;
+  draw_box_with_label(0, 0, args.terminal_cols, args.terminal_rows, " fradar ".to_string())?;
 
   // Draw center crosshair
-  draw_crosshair()?;
+  draw_crosshair(args.terminal_cols / 2, args.terminal_rows / 2)?;
   
   std::io::stdout().flush()?;
 
@@ -62,12 +61,10 @@ pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> anyhow::Result<()> {
   Ok(())
 }
 
-fn draw_crosshair() -> anyhow::Result<()> {
-  let (terminal_cols, terminal_rows) = size()?;
-
+fn draw_crosshair(x: u16, y: u16) -> anyhow::Result<()> {
   queue!(
     std::io::stdout(),
-    cursor::MoveTo(terminal_cols / 2, terminal_rows / 2),
+    cursor::MoveTo(x, y),
     style::Print("●︎"),
   )?;
 
@@ -130,10 +127,10 @@ fn draw_radar_layer(flights_data: Arc<Mutex<FlightData>>, args: FRadarArgs) -> a
   let sectorizer: &mut HashMap<(u16, u16), Vec<(f64, f64)>> = &mut HashMap::new();
 
   let dots_coord: Vec<(u16, u16)> = flights_data.iter()
-    .map(|(position, _)| position.as_terminal_coord(args))
+    .map(|(position, _)| position.as_terminal_coord(&args))
     .collect();
   let dots_coord_float: Vec<(f64, f64)> = flights_data.iter()
-    .map(|(position, _)| position.as_terminal_coord_float(args))
+    .map(|(position, _)| position.as_terminal_coord_float(&args))
     .collect();
 
   let zipped_dots: Vec<((u16, u16), (f64, f64))> = dots_coord.iter()
@@ -168,29 +165,27 @@ fn draw_radar_layer(flights_data: Arc<Mutex<FlightData>>, args: FRadarArgs) -> a
 
 fn label_engine(flights_data: Vec<(Position, Label)>, args: FRadarArgs) -> std::thread::JoinHandle<anyhow::Result<()>> {
   std::thread::spawn(move || -> anyhow::Result<()> {
-    let (terminal_cols, terminal_rows) = size()?;
-
-    for (position, label) in flights_data.clone() {
-      let (mut pushed_col, mut pushed_row) = position.as_terminal_coord_float(args);
+    for (position, label) in flights_data.iter() {
+      let (mut pushed_col, mut pushed_row) = position.as_terminal_coord_float(&args);
 
       // Initialize to the "top right"
       pushed_col += 1.0;
       pushed_row -= 1.0;
       
       // Simulate inverse gravitational forces
-      // for (other_position, _) in flights_data.clone() {
-      //   let hypot_squared: f64 = position.terminal_coord_squared_distance(&other_position, args);
-      //   if hypot_squared > 0.1 {
-      //     pushed_col -= args.label_point_repelling_force *
-      //       (other_position.as_terminal_coord_float(args).0 - pushed_col) /
-      //       hypot_squared;
-      //     pushed_row -= args.label_point_repelling_force *
-      //       (other_position.as_terminal_coord_float(args).1 - pushed_row) /
-      //       hypot_squared;
-      //   }
-      // }
+      for (other_position, _) in flights_data.iter() {
+        let hypot_squared: f64 = position.terminal_coord_squared_distance(&other_position, &args);
+        if hypot_squared > 0.1 {
+          pushed_col -= args.label_point_repelling_force *
+            (other_position.as_terminal_coord_float(&args).0 - pushed_col) /
+            hypot_squared;
+          pushed_row -= args.label_point_repelling_force *
+            (other_position.as_terminal_coord_float(&args).1 - pushed_row) /
+            hypot_squared;
+        }
+      }
 
-      let (original_col, original_row) = position.as_terminal_coord_float(args);
+      let (original_col, original_row) = position.as_terminal_coord_float(&args);
       let label_position = match (pushed_col - original_col, pushed_row - original_row) {
         (dc, dr) if (dc > 0.0 && dr > 0.0) => LabelPosition::BottomRight,
         (dc, dr) if (dc < 0.0 && dr > 0.0) => LabelPosition::BottomLeft,
@@ -201,8 +196,19 @@ fn label_engine(flights_data: Vec<(Position, Label)>, args: FRadarArgs) -> std::
 
       let (del_col, del_row) = label.compute_display_delta(label_position);
       let (res_col, res_row) = (del_col as f64 + original_col, del_row as f64 + original_row);
-      if res_col < 3.0 || res_col + label.len() as f64 > -3.0 + terminal_cols as f64 ||
-         res_row < 3.0 || res_row + label.height() as f64 > -3.0 + terminal_rows as f64 {
+      if res_col < 3.0 || res_col + label.len() as f64 > -3.0 + args.terminal_cols as f64 ||
+         res_row < 3.0 || res_row + label.height() as f64 > -3.0 + args.terminal_rows as f64 {
+        continue;
+      }
+
+      let mut do_draw = true;
+      for (other_position, _) in flights_data.iter() {
+        if other_position.is_terminal_coord_in_box(res_col as u16, res_row as u16, label.len() as u16, label.height() as u16, &args) {
+          do_draw = false;
+        }
+      }
+
+      if !do_draw {
         continue;
       }
 
