@@ -27,6 +27,7 @@ pub async fn event_dispatch_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio
               _ => continue,
           }
         },
+        Event::Resize(new_width, new_height) => change_term_size(fradar_data.clone(), new_width, new_height),
         _ => {},
       }
     }
@@ -51,8 +52,8 @@ pub fn graceful_shutdown(fradar_data: Arc<Mutex<FRadarData>>) {
 
 pub fn change_radius(fradar_data: Arc<Mutex<FRadarData>>, factor: f64) {
   {
-    let fradar_radius: &mut f64 = &mut fradar_data.lock().unwrap().args.radius;
-    *fradar_radius = *fradar_radius as f64 * factor;
+    let fradar_args: &mut FRadarArgs = &mut fradar_data.lock().unwrap().args;
+    fradar_args.radius = fradar_args.radius as f64 * factor;
   }
 
   execute!(
@@ -74,6 +75,14 @@ pub fn change_origin(fradar_data: Arc<Mutex<FRadarData>>, delta_lat: f64, delta_
     crossterm::cursor::MoveTo(3, 4),
     crossterm::style::Print(format!("{:?}", fradar_data.lock().unwrap().args.origin)),
   ).unwrap();
+}
+
+pub fn change_term_size(fradar_data: Arc<Mutex<FRadarData>>, new_width: u16, new_height: u16) {
+  {
+    let fradar_args: &mut FRadarArgs = &mut fradar_data.lock().unwrap().args;
+    fradar_args.terminal_cols = new_width;
+    fradar_args.terminal_rows = new_height;
+  }
 }
 
 fn lat_per_pixel(args: &FRadarArgs) -> f64 {
