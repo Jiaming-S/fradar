@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, sync::{Arc, Mutex}, time::Duration};
 
+use anyhow::anyhow;
 use chrono::{DateTime, Utc};
-use crossterm::{terminal::size};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
@@ -36,9 +36,16 @@ pub struct FRadarArgs {
   pub origin: Position,
   pub radius: f64,
 
+  pub starting_origin: Position,
+
   pub data_interval: Duration,
   pub frame_interval: Duration,
   pub event_interval: Duration,
+
+  pub terminal_cols: u16,
+  pub terminal_rows: u16,
+
+  pub terminal_edge_margins: u16,
 
   pub label_label_repelling_force: f64,
   pub label_point_repelling_force: f64,
@@ -68,24 +75,22 @@ impl Position {
     2.0 // TODO: dynamically find value
   }
 
-  pub fn is_terminal_coord_in_box(&self, x: u16, y: u16, w: u16, h: u16, args: FRadarArgs) -> bool {
-    let (col, row) = self.as_terminal_coord(args);
-    col >= x && col <= x + w && row >= y && row <= y + h
+  pub fn roughly_eq(&self, other: &Self) -> bool {
+    (self.lat - other.lat).abs() * Self::latlong_miles_ratio() < 0.1 && (self.long - other.long).abs() * Self::latlong_miles_ratio() < 0.1
   }
 
-  pub fn as_terminal_coord(&self, args: FRadarArgs) -> (u16, u16) {
-    let (col_float, row_float) = self.as_terminal_coord_float(args);
-    (col_float as u16, row_float as u16)
+  pub fn as_terminal_coord(&self, args: &FRadarArgs) -> anyhow::Result<Coord<u16>> {
+    self.as_terminal_coord_float(args).try_into()
   }
 
-  pub fn as_terminal_coord_float(&self, args: FRadarArgs) -> (f64, f64) {
-    let terminal_cols: f64 = size().unwrap().0.into();
-    let terminal_rows: f64 = size().unwrap().1.into();
+  pub fn as_terminal_coord_float(&self, args: &FRadarArgs) -> Coord<f64> {
+    let terminal_cols: f64 = args.terminal_cols.into();
+    let terminal_rows: f64 = args.terminal_rows.into();
   
     let latlong_to_miles: f64  = Self::latlong_miles_ratio();     // TODO: dynamically find value
     let char_aspect_ratio: f64 = Self::character_aspect_ratio();  // TODO: dynamically find value
-    let lat_scale_factor: f64  = (f64::min(terminal_cols / 2.0, terminal_rows / 2.0)) / (args.radius as f64) * latlong_to_miles * char_aspect_ratio;
-    let long_scale_factor: f64 = (f64::min(terminal_cols / 2.0, terminal_rows / 2.0)) / (args.radius as f64) * latlong_to_miles;
+    let lat_scale_factor: f64  = (f64::max(terminal_cols / 2.0, terminal_rows / 2.0)) / (args.radius as f64) * latlong_to_miles * char_aspect_ratio;
+    let long_scale_factor: f64 = (f64::max(terminal_cols / 2.0, terminal_rows / 2.0)) / (args.radius as f64) * latlong_to_miles;
 
     let delta_lat  = self.lat - args.origin.lat;
     let delta_long = self.long - args.origin.long;
@@ -99,13 +104,43 @@ impl Position {
     let clamped_col = col.clamp(0.0, terminal_cols);
     let clamped_row = row.clamp(0.0, terminal_rows);
 
-    (clamped_col, clamped_row)
+    Coord {
+      col: clamped_col,
+      row: clamped_row,
+    }
   }
+}
 
-  pub fn terminal_coord_squared_distance(&self, other: &Self, args: FRadarArgs) -> f64 {
-    let (c1, r1) = self.as_terminal_coord_float(args);
-    let (c2, r2) = other.as_terminal_coord_float(args);
-    (c1 - c2).powi(2) + (r1 - r2).powi(2)
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq, Hash, Eq)]
+pub struct Coord<T> {
+  pub col: T,
+  pub row: T,
+}
+
+impl Coord<u16> {
+  pub fn is_in_box(&self, x: u16, y: u16, w: u16, h: u16) -> bool {
+    self.col >= x && self.col <= x + w && self.row >= y && self.row <= y + h
+  }
+}
+
+impl Coord<f64> {
+  pub fn squared_dist(&self, other: Self) -> f64 {
+    (self.col - other.col).powi(2) + (self.row - other.row).powi(2)
+  }
+}
+
+impl TryFrom<Coord<f64>> for Coord<u16> {
+  type Error = anyhow::Error;
+
+  fn try_from(value: Coord<f64>) -> Result<Self, Self::Error> {
+    if value.col < 0.0 || value.row < 0.0 {
+      return Err(anyhow!("Can't convert negative value col: {} row: {}", value.col, value.row));
+    }
+
+    Ok(Coord {
+      col: value.col as u16,
+      row: value.row as u16,
+    })
   }
 }
 

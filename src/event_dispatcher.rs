@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use crossterm::{event::{read, Event, KeyCode}, execute, terminal::size};
+use crossterm::{event::{read, Event, KeyCode}, execute};
 
 use crate::model::{FRadarArgs, FRadarData, FRadarState, Position};
 
@@ -13,10 +13,10 @@ pub async fn event_dispatch_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio
         Event::Key(key_event) => {
           match key_event.code {
             KeyCode::Delete | KeyCode::Esc | KeyCode::End | KeyCode::Char('q') => graceful_shutdown(fradar_data.clone()),
-            KeyCode::Char('w') | KeyCode::Up    => change_origin(fradar_data.clone(),  lat_per_pixel(args),  0.0),
-            KeyCode::Char('s') | KeyCode::Down  => change_origin(fradar_data.clone(), -lat_per_pixel(args),  0.0),
-            KeyCode::Char('a') | KeyCode::Left  => change_origin(fradar_data.clone(),  0.0, -long_per_pixel(args)),
-            KeyCode::Char('d') | KeyCode::Right => change_origin(fradar_data.clone(),  0.0,  long_per_pixel(args)),
+            KeyCode::Char('w') | KeyCode::Up    => change_origin(fradar_data.clone(),  lat_per_pixel(&args),  0.0),
+            KeyCode::Char('s') | KeyCode::Down  => change_origin(fradar_data.clone(), -lat_per_pixel(&args),  0.0),
+            KeyCode::Char('a') | KeyCode::Left  => change_origin(fradar_data.clone(),  0.0, -long_per_pixel(&args)),
+            KeyCode::Char('d') | KeyCode::Right => change_origin(fradar_data.clone(),  0.0,  long_per_pixel(&args)),
             _ => continue,
           }
         },
@@ -27,6 +27,7 @@ pub async fn event_dispatch_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio
               _ => continue,
           }
         },
+        Event::Resize(new_width, new_height) => change_term_size(fradar_data.clone(), new_width, new_height),
         _ => {},
       }
     }
@@ -51,8 +52,8 @@ pub fn graceful_shutdown(fradar_data: Arc<Mutex<FRadarData>>) {
 
 pub fn change_radius(fradar_data: Arc<Mutex<FRadarData>>, factor: f64) {
   {
-    let fradar_radius: &mut f64 = &mut fradar_data.lock().unwrap().args.radius;
-    *fradar_radius = *fradar_radius as f64 * factor;
+    let fradar_args: &mut FRadarArgs = &mut fradar_data.lock().unwrap().args;
+    fradar_args.radius = fradar_args.radius as f64 * factor;
   }
 
   execute!(
@@ -76,15 +77,24 @@ pub fn change_origin(fradar_data: Arc<Mutex<FRadarData>>, delta_lat: f64, delta_
   ).unwrap();
 }
 
-fn lat_per_pixel(args: FRadarArgs) -> f64 {
-  let terminal_cols: f64 = size().unwrap().0.into();
-  let terminal_rows: f64 = size().unwrap().1.into();
-  (args.radius as f64) / Position::latlong_miles_ratio() / (f64::min(terminal_cols / 2.0, terminal_rows / 2.0)) / Position::character_aspect_ratio()
+pub fn change_term_size(fradar_data: Arc<Mutex<FRadarData>>, new_width: u16, new_height: u16) {
+  {
+    let fradar_args: &mut FRadarArgs = &mut fradar_data.lock().unwrap().args;
+    fradar_args.terminal_cols = new_width;
+    fradar_args.terminal_rows = new_height;
+  }
 }
 
-fn long_per_pixel(args: FRadarArgs) -> f64 {
-  let terminal_cols: f64 = size().unwrap().0.into();
-  let terminal_rows: f64 = size().unwrap().1.into();
-  (args.radius as f64) / Position::latlong_miles_ratio() / (f64::min(terminal_cols / 2.0, terminal_rows / 2.0))
+fn lat_per_pixel(args: &FRadarArgs) -> f64 {
+  (args.radius as f64) /
+    Position::latlong_miles_ratio() /
+    (f64::max(args.terminal_cols as f64 / 2.0, args.terminal_rows as f64 / 2.0)) /
+    Position::character_aspect_ratio()
+}
+
+fn long_per_pixel(args: &FRadarArgs) -> f64 {
+  (args.radius as f64) /
+    Position::latlong_miles_ratio() /
+    (f64::max(args.terminal_cols as f64 / 2.0, args.terminal_rows as f64 / 2.0))
 }
 

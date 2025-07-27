@@ -1,6 +1,7 @@
 use std::{collections::VecDeque, sync::{Arc, Mutex}, time::Duration};
 
 use controller::controller_thread;
+use crossterm::terminal::size;
 use model::{FlightData, Position};
 use view::view_thread;
 
@@ -23,9 +24,20 @@ async fn main() -> anyhow::Result<()> {
             long: -122.3816,
         },
         radius: 50.0,
+
+        starting_origin: Position {
+            lat: 37.6191,
+            long: -122.3816,
+        },
+
         data_interval: Duration::from_millis((1.0 / 1.0 * 1000.0) as u64),
         frame_interval: Duration::from_millis((1.0 / 10.0 * 1000.0) as u64),
         event_interval: Duration::from_millis(100),
+
+        terminal_cols: size()?.0,
+        terminal_rows: size()?.1,
+
+        terminal_edge_margins: 3,
 
         label_label_repelling_force: 4.0,
         label_point_repelling_force: 4.0,

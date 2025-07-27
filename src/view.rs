@@ -1,9 +1,9 @@
 use std::{collections::HashMap, io::Write, sync::{Arc, Mutex}};
 
-use crossterm::{cursor, execute, queue, style::{self}, terminal::{size, Clear, ClearType}};
+use crossterm::{cursor, execute, queue, style::{self}, terminal::{Clear, ClearType}};
 use tokio::{time::Instant};
 
-use crate::model::{FRadarArgs, FRadarData, FRadarState, FlightData, Label, LabelPosition, Position};
+use crate::model::{Coord, FRadarArgs, FRadarData, FRadarState, FlightData, Label, LabelPosition, Position};
 
 
 pub async fn view_thread(fradar_data: Arc<Mutex<FRadarData>>) -> tokio::task::JoinHandle<anyhow::Result<()>> {
@@ -33,7 +33,6 @@ pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> anyhow::Result<()> {
     Clear(ClearType::All),
   )?;
   
-  let (terminal_cols, terminal_rows) = size()?;
   let args: FRadarArgs;
 
   {
@@ -47,10 +46,10 @@ pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> anyhow::Result<()> {
   }
 
   // Draw side borders.
-  draw_box_with_label(0, 0, terminal_cols, terminal_rows, " fradar ".to_string())?;
+  draw_box_with_label(0, 0, args.terminal_cols, args.terminal_rows, " fradar ".to_string())?;
 
   // Draw center crosshair
-  draw_crosshair()?;
+  draw_crosshair(&args)?;
   
   std::io::stdout().flush()?;
 
@@ -62,14 +61,35 @@ pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> anyhow::Result<()> {
   Ok(())
 }
 
-fn draw_crosshair() -> anyhow::Result<()> {
-  let (terminal_cols, terminal_rows) = size()?;
-
-  queue!(
-    std::io::stdout(),
-    cursor::MoveTo(terminal_cols / 2, terminal_rows / 2),
-    style::Print("●︎"),
-  )?;
+fn draw_crosshair(args: &FRadarArgs) -> anyhow::Result<()> {
+  if args.origin.roughly_eq(&args.starting_origin) {
+    queue!(
+      std::io::stdout(),
+      cursor::MoveTo(args.terminal_cols / 2, args.terminal_rows / 2),
+      style::Print("●︎"),
+    )?;
+  }
+  else {
+    let lat_threshold: f64  = 0.1 / Position::latlong_miles_ratio() / Position::character_aspect_ratio();
+    let long_threshold: f64 = 0.1 / Position::latlong_miles_ratio();
+    let c: char = match (args.starting_origin.lat - args.origin.lat, args.starting_origin.long - args.origin.long) {
+      (delta_lat, delta_long) if delta_lat >  lat_threshold && delta_long < -long_threshold => '↖',
+      (delta_lat, delta_long) if delta_lat >  lat_threshold && delta_long >  long_threshold => '↗',
+      (delta_lat, delta_long) if delta_lat < -lat_threshold && delta_long >  long_threshold => '↘',
+      (delta_lat, delta_long) if delta_lat < -lat_threshold && delta_long < -long_threshold => '↙',
+      (delta_lat,  _) if delta_lat  >  lat_threshold  => '↑',
+      (delta_lat,  _) if delta_lat  < -lat_threshold  => '↓',
+      (_, delta_long) if delta_long >  long_threshold => '→',
+      (_, delta_long) if delta_long < -long_threshold => '←',
+      _ => '?',
+    };
+    
+    queue!(
+      std::io::stdout(),
+      cursor::MoveTo(args.terminal_cols / 2, args.terminal_rows / 2),
+      style::Print(c),
+    )?;
+  }
 
   Ok(())
 }
@@ -127,18 +147,18 @@ fn draw_radar_layer(flights_data: Arc<Mutex<FlightData>>, args: FRadarArgs) -> a
   let label_engine_handle = label_engine(flights_data.clone(), args);
 
   // First step: generate sectorizer hashmap to correctly get braille for sub-character drawing
-  let sectorizer: &mut HashMap<(u16, u16), Vec<(f64, f64)>> = &mut HashMap::new();
+  let sectorizer: &mut HashMap<Coord<u16>, Vec<Coord<f64>>> = &mut HashMap::new();
 
-  let dots_coord: Vec<(u16, u16)> = flights_data.iter()
-    .map(|(position, _)| position.as_terminal_coord(args))
+  let dots_coord: Vec<Coord<u16>> = flights_data.iter()
+    .map(|(position, _)| position.as_terminal_coord(&args).unwrap()) // TODO: handle the unwrap from converting float to coord
     .collect();
-  let dots_coord_float: Vec<(f64, f64)> = flights_data.iter()
-    .map(|(position, _)| position.as_terminal_coord_float(args))
+  let dots_coord_float: Vec<Coord<f64>> = flights_data.iter()
+    .map(|(position, _)| position.as_terminal_coord_float(&args))
     .collect();
 
-  let zipped_dots: Vec<((u16, u16), (f64, f64))> = dots_coord.iter()
+  let zipped_dots: Vec<(Coord<u16>, Coord<f64>)> = dots_coord.iter()
     .zip(dots_coord_float.iter())
-    .map(|((col, row), (col_float, row_float))| ((*col, *row), (*col_float, *row_float)))
+    .map(|(coord, coord_float)| (*coord, *coord_float))
     .collect();
 
   for (coord, coord_float) in zipped_dots {
@@ -149,13 +169,16 @@ fn draw_radar_layer(flights_data: Arc<Mutex<FlightData>>, args: FRadarArgs) -> a
 
   // Second step: using sectorizer hashmap, determine what braille character to display, and queue draw to stdout
   for (sector, dots_coord_float) in sectorizer.iter() {
-    let braille_coords: Vec<(usize, usize)> = dots_coord_float.iter()
-      .map(|(col, row)| (((col - col.trunc()) * 2.0).trunc() as usize, ((row - row.trunc()) * 4.0).trunc() as usize))
+    let braille_coords: Vec<Coord<usize>> = dots_coord_float.iter()
+      .map(|coord_float| Coord::<usize> {
+        col: ((coord_float.col - coord_float.col.trunc()) * 2.0).trunc() as usize, // extract only decimal place, then
+        row: ((coord_float.row - coord_float.row.trunc()) * 4.0).trunc() as usize, // multiple by col or row respectively
+      })
       .collect();
 
     queue!(
       std::io::stdout(),
-      cursor::MoveTo(sector.0, sector.1),
+      cursor::MoveTo(sector.col, sector.row),
       style::Print(generate_subchar_braille(&braille_coords)),
     )?;
   }
@@ -168,30 +191,30 @@ fn draw_radar_layer(flights_data: Arc<Mutex<FlightData>>, args: FRadarArgs) -> a
 
 fn label_engine(flights_data: Vec<(Position, Label)>, args: FRadarArgs) -> std::thread::JoinHandle<anyhow::Result<()>> {
   std::thread::spawn(move || -> anyhow::Result<()> {
-    let (terminal_cols, terminal_rows) = size()?;
-
-    for (position, label) in flights_data.clone() {
-      let (mut pushed_col, mut pushed_row) = position.as_terminal_coord_float(args);
+    for (position, label) in flights_data.iter() {
+      // Moving ("pushed") coordinate for this label
+      let pushed_coord = &mut position.as_terminal_coord_float(&args);
 
       // Initialize to the "top right"
-      pushed_col += 1.0;
-      pushed_row -= 1.0;
+      pushed_coord.col += 1.0;
+      pushed_coord.row -= 1.0;
       
-      // Simulate inverse gravitational forces
-      // for (other_position, _) in flights_data.clone() {
-      //   let hypot_squared: f64 = position.terminal_coord_squared_distance(&other_position, args);
-      //   if hypot_squared > 0.1 {
-      //     pushed_col -= args.label_point_repelling_force *
-      //       (other_position.as_terminal_coord_float(args).0 - pushed_col) /
-      //       hypot_squared;
-      //     pushed_row -= args.label_point_repelling_force *
-      //       (other_position.as_terminal_coord_float(args).1 - pushed_row) /
-      //       hypot_squared;
-      //   }
-      // }
+      // Simulate inverse gravitational forces between labels and points
+      for (other_position, _) in flights_data.iter() {
+        let other_coord_float: Coord<f64> = other_position.as_terminal_coord_float(&args);
+        let hypot_squared: f64 = pushed_coord.squared_dist(other_coord_float);
+        if hypot_squared > 0.1 {
+          pushed_coord.col -= args.label_point_repelling_force *
+            (other_coord_float.col - pushed_coord.col) /
+            hypot_squared;
+          pushed_coord.row -= args.label_point_repelling_force *
+            (other_coord_float.row - pushed_coord.row) /
+            hypot_squared;
+        }
+      }
 
-      let (original_col, original_row) = position.as_terminal_coord_float(args);
-      let label_position = match (pushed_col - original_col, pushed_row - original_row) {
+      let original_coord: Coord<f64> = position.as_terminal_coord_float(&args);
+      let label_position = match (pushed_coord.col - original_coord.col, pushed_coord.row - original_coord.row) {
         (dc, dr) if (dc > 0.0 && dr > 0.0) => LabelPosition::BottomRight,
         (dc, dr) if (dc < 0.0 && dr > 0.0) => LabelPosition::BottomLeft,
         (dc, dr) if (dc > 0.0 && dr < 0.0) => LabelPosition::TopRight,
@@ -200,9 +223,20 @@ fn label_engine(flights_data: Vec<(Position, Label)>, args: FRadarArgs) -> std::
       };
 
       let (del_col, del_row) = label.compute_display_delta(label_position);
-      let (res_col, res_row) = (del_col as f64 + original_col, del_row as f64 + original_row);
-      if res_col < 3.0 || res_col + label.len() as f64 > -3.0 + terminal_cols as f64 ||
-         res_row < 3.0 || res_row + label.height() as f64 > -3.0 + terminal_rows as f64 {
+      let (res_col, res_row) = (del_col as f64 + original_coord.col, del_row as f64 + original_coord.row);
+      if res_col < 3.0 || res_col + label.len() as f64 > -3.0 + args.terminal_cols as f64 ||
+         res_row < 3.0 || res_row + label.height() as f64 > -3.0 + args.terminal_rows as f64 {
+        continue;
+      }
+
+      let mut do_draw = true;
+      for (other_position, _) in flights_data.iter() {
+        if other_position.as_terminal_coord(&args)?.is_in_box(res_col as u16, res_row as u16, label.len() as u16, label.height() as u16) {
+          do_draw = false;
+        }
+      }
+
+      if !do_draw {
         continue;
       }
 
@@ -220,20 +254,25 @@ fn label_engine(flights_data: Vec<(Position, Label)>, args: FRadarArgs) -> std::
   })
 }
 
-fn generate_subchar_braille(braille_coords: &Vec<(usize, usize)>) -> char {
-  let braille_dots_raised: &mut [[bool; 2]; 4] = &mut [[false; 2]; 4];
-  braille_coords.iter().for_each(|(col, row)| braille_dots_raised[*row][*col] = true);
-
+fn generate_subchar_braille(braille_coords: &Vec<Coord<usize>>) -> char {
   let mut braille_unicode: u32 = 0;
-  let mut position = 0;
-  braille_dots_raised.as_flattened().iter().for_each(|&bit| {
-    if bit {
-      braille_unicode |= 1 << position;
-    }
 
-    position += 1;
-  });
+  for &coord in braille_coords {
+    let bit_index = match (coord.col, coord.row) {
+      (0, 0) => 0,
+      (0, 1) => 1,
+      (0, 2) => 2,
+      (1, 0) => 3,
+      (1, 1) => 4,
+      (1, 2) => 5,
+      (0, 3) => 6,
+      (1, 3) => 7,
+      _ => continue,
+    };
 
-  char::from_u32(10240 + braille_unicode).unwrap()
+    braille_unicode |= 1 << bit_index;
+  }
+
+  char::from_u32(0x2800 + braille_unicode).unwrap_or(' ')
 }
 
