@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, ops::{Add, Sub}, sync::{Arc, Mutex}, time::Duration};
+use std::{collections::VecDeque, sync::{Arc, Mutex}, time::Duration};
 
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
@@ -36,12 +36,16 @@ pub struct FRadarArgs {
   pub origin: Position,
   pub radius: f64,
 
+  pub starting_origin: Position,
+
   pub data_interval: Duration,
   pub frame_interval: Duration,
   pub event_interval: Duration,
 
   pub terminal_cols: u16,
   pub terminal_rows: u16,
+
+  pub terminal_edge_margins: u16,
 
   pub label_label_repelling_force: f64,
   pub label_point_repelling_force: f64,
@@ -71,6 +75,10 @@ impl Position {
     2.0 // TODO: dynamically find value
   }
 
+  pub fn roughly_eq(&self, other: &Self) -> bool {
+    (self.lat - other.lat).abs() * Self::latlong_miles_ratio() < 0.1 && (self.long - other.long).abs() * Self::latlong_miles_ratio() < 0.1
+  }
+
   pub fn as_terminal_coord(&self, args: &FRadarArgs) -> anyhow::Result<Coord<u16>> {
     self.as_terminal_coord_float(args).try_into()
   }
@@ -81,8 +89,8 @@ impl Position {
   
     let latlong_to_miles: f64  = Self::latlong_miles_ratio();     // TODO: dynamically find value
     let char_aspect_ratio: f64 = Self::character_aspect_ratio();  // TODO: dynamically find value
-    let lat_scale_factor: f64  = (f64::min(terminal_cols / 2.0, terminal_rows / 2.0)) / (args.radius as f64) * latlong_to_miles * char_aspect_ratio;
-    let long_scale_factor: f64 = (f64::min(terminal_cols / 2.0, terminal_rows / 2.0)) / (args.radius as f64) * latlong_to_miles;
+    let lat_scale_factor: f64  = (f64::max(terminal_cols / 2.0, terminal_rows / 2.0)) / (args.radius as f64) * latlong_to_miles * char_aspect_ratio;
+    let long_scale_factor: f64 = (f64::max(terminal_cols / 2.0, terminal_rows / 2.0)) / (args.radius as f64) * latlong_to_miles;
 
     let delta_lat  = self.lat - args.origin.lat;
     let delta_long = self.long - args.origin.long;

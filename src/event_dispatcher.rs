@@ -88,13 +88,13 @@ pub fn change_term_size(fradar_data: Arc<Mutex<FRadarData>>, new_width: u16, new
 fn lat_per_pixel(args: &FRadarArgs) -> f64 {
   (args.radius as f64) /
     Position::latlong_miles_ratio() /
-    (f64::min(args.terminal_cols as f64 / 2.0, args.terminal_rows as f64 / 2.0)) /
+    (f64::max(args.terminal_cols as f64 / 2.0, args.terminal_rows as f64 / 2.0)) /
     Position::character_aspect_ratio()
 }
 
 fn long_per_pixel(args: &FRadarArgs) -> f64 {
   (args.radius as f64) /
     Position::latlong_miles_ratio() /
-    (f64::min(args.terminal_cols as f64 / 2.0, args.terminal_rows as f64 / 2.0))
+    (f64::max(args.terminal_cols as f64 / 2.0, args.terminal_rows as f64 / 2.0))
 }
 

@@ -49,7 +49,7 @@ pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> anyhow::Result<()> {
   draw_box_with_label(0, 0, args.terminal_cols, args.terminal_rows, " fradar ".to_string())?;
 
   // Draw center crosshair
-  draw_crosshair(args.terminal_cols / 2, args.terminal_rows / 2)?;
+  draw_crosshair(&args)?;
   
   std::io::stdout().flush()?;
 
@@ -61,12 +61,35 @@ pub async fn draw(fradar_data: Arc<Mutex<FRadarData>>) -> anyhow::Result<()> {
   Ok(())
 }
 
-fn draw_crosshair(x: u16, y: u16) -> anyhow::Result<()> {
-  queue!(
-    std::io::stdout(),
-    cursor::MoveTo(x, y),
-    style::Print("●︎"),
-  )?;
+fn draw_crosshair(args: &FRadarArgs) -> anyhow::Result<()> {
+  if args.origin.roughly_eq(&args.starting_origin) {
+    queue!(
+      std::io::stdout(),
+      cursor::MoveTo(args.terminal_cols / 2, args.terminal_rows / 2),
+      style::Print("●︎"),
+    )?;
+  }
+  else {
+    let lat_threshold: f64  = 0.1 / Position::latlong_miles_ratio() / Position::character_aspect_ratio();
+    let long_threshold: f64 = 0.1 / Position::latlong_miles_ratio();
+    let c: char = match (args.starting_origin.lat - args.origin.lat, args.starting_origin.long - args.origin.long) {
+      (delta_lat, delta_long) if delta_lat >  lat_threshold && delta_long < -long_threshold => '↖',
+      (delta_lat, delta_long) if delta_lat >  lat_threshold && delta_long >  long_threshold => '↗',
+      (delta_lat, delta_long) if delta_lat < -lat_threshold && delta_long >  long_threshold => '↘',
+      (delta_lat, delta_long) if delta_lat < -lat_threshold && delta_long < -long_threshold => '↙',
+      (delta_lat,  _) if delta_lat  >  lat_threshold  => '↑',
+      (delta_lat,  _) if delta_lat  < -lat_threshold  => '↓',
+      (_, delta_long) if delta_long >  long_threshold => '→',
+      (_, delta_long) if delta_long < -long_threshold => '←',
+      _ => '?',
+    };
+    
+    queue!(
+      std::io::stdout(),
+      cursor::MoveTo(args.terminal_cols / 2, args.terminal_rows / 2),
+      style::Print(c),
+    )?;
+  }
 
   Ok(())
 }
@@ -176,15 +199,16 @@ fn label_engine(flights_data: Vec<(Position, Label)>, args: FRadarArgs) -> std::
       pushed_coord.col += 1.0;
       pushed_coord.row -= 1.0;
       
-      // Simulate inverse gravitational forces
+      // Simulate inverse gravitational forces between labels and points
       for (other_position, _) in flights_data.iter() {
-        let hypot_squared: f64 = pushed_coord.squared_dist(other_position.as_terminal_coord_float(&args));
+        let other_coord_float: Coord<f64> = other_position.as_terminal_coord_float(&args);
+        let hypot_squared: f64 = pushed_coord.squared_dist(other_coord_float);
         if hypot_squared > 0.1 {
           pushed_coord.col -= args.label_point_repelling_force *
-            (other_position.as_terminal_coord_float(&args).col - pushed_coord.col) /
+            (other_coord_float.col - pushed_coord.col) /
             hypot_squared;
           pushed_coord.row -= args.label_point_repelling_force *
-            (other_position.as_terminal_coord_float(&args).row - pushed_coord.row) /
+            (other_coord_float.row - pushed_coord.row) /
             hypot_squared;
         }
       }
